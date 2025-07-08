@@ -4,6 +4,7 @@ import { createClient } from 'next-sanity'
 import Link from 'next/link'
 import Image from 'next/image'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 
 const client = createClient({
   projectId: 'plkjpsnw',
@@ -12,31 +13,37 @@ const client = createClient({
   apiVersion: '2023-07-06',
 })
 
-export async function getServerSideProps({ params }) {
+const POSTS_PER_PAGE = 10;
+
+export async function getServerSideProps({ params, query }) {
   const { slug } = params
+  const page = parseInt(query.page) || 1
+  const start = (page - 1) * POSTS_PER_PAGE
+  const end = start + POSTS_PER_PAGE
 
   const category = await client.fetch(
     `*[_type == "category" && slug.current == $slug][0]`,
     { slug }
   )
 
-  if (!category) {
-    return { notFound: true }
-  }
+  if (!category) return { notFound: true }
 
   const posts = await client.fetch(
-    `*[_type == "post" && references($catId)] | order(_createdAt desc){
+    `*[_type == "post" && references($catId)] | order(publishedAt desc)[$start...$end]{
       _id,
       title,
       slug,
       publishedAt,
       mainImage {
-        asset->{
-          url
-        }
+        asset->{ url }
       },
       excerpt
     }`,
+    { catId: category._id, start, end }
+  )
+
+  const total = await client.fetch(
+    `count(*[_type == "post" && references($catId)])`,
     { catId: category._id }
   )
 
@@ -44,11 +51,32 @@ export async function getServerSideProps({ params }) {
     props: {
       category,
       posts,
+      currentPage: page,
+      totalPages: Math.ceil(total / POSTS_PER_PAGE),
     },
   }
 }
 
-export default function CategoryPage({ category, posts }) {
+export default function CategoryPage({ category, posts, currentPage, totalPages }) {
+  const router = useRouter()
+  const { slug } = router.query
+
+  const renderPagination = () => {
+    const prev = currentPage > 1
+    const next = currentPage < totalPages
+    return (
+      <div className="flex justify-center mt-8 space-x-4">
+        {prev && (
+          <Link href={`/category/${slug}?page=${currentPage - 1}`} className="text-blue-600">← Previous</Link>
+        )}
+        <span className="text-gray-600">Page {currentPage} of {totalPages}</span>
+        {next && (
+          <Link href={`/category/${slug}?page=${currentPage + 1}`} className="text-blue-600">Next →</Link>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
       <Head>
@@ -61,37 +89,38 @@ export default function CategoryPage({ category, posts }) {
         {posts.length === 0 ? (
           <p className="text-gray-600">No posts found for this category yet.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="space-y-6">
             {posts.map(post => (
               <Link
                 key={post._id}
                 href={`/post/${post.slug.current}`}
-                className="block bg-white rounded shadow hover:shadow-lg transition overflow-hidden"
+                className="flex bg-white rounded shadow hover:shadow-md transition overflow-hidden"
               >
-                <div>
-                  {post.mainImage?.asset?.url && (
+                {post.mainImage?.asset?.url && (
+                  <div className="w-48 h-32 relative">
                     <Image
                       src={post.mainImage.asset.url}
                       alt={post.title}
-                      width={400}
-                      height={250}
-                      className="w-full h-48 object-cover"
+                      layout="fill"
+                      objectFit="cover"
                     />
-                  )}
-                  <div className="p-4">
-                    <h2 className="text-lg font-semibold mb-1">{post.title}</h2>
-                    <p className="text-sm text-gray-600">
-                      {new Date(post.publishedAt).toLocaleDateString()}
-                    </p>
-                    {post.excerpt && (
-                      <p className="text-sm mt-2 text-gray-700">{post.excerpt}</p>
-                    )}
                   </div>
+                )}
+                <div className="p-4 flex-1">
+                  <h2 className="text-xl font-semibold mb-1">{post.title}</h2>
+                  <p className="text-sm text-gray-600">
+                    {new Date(post.publishedAt).toLocaleDateString()}
+                  </p>
+                  {post.excerpt && (
+                    <p className="text-sm text-gray-700 mt-1 line-clamp-2">{post.excerpt}</p>
+                  )}
                 </div>
               </Link>
             ))}
           </div>
         )}
+
+        {renderPagination()}
       </main>
     </>
   )
