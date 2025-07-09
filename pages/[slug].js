@@ -1,6 +1,6 @@
 // pages/[slug].js
 import { groq } from 'next-sanity';
-import { getClient } from '../lib/sanity.server';
+import { getClient } from '../lib/sanity';
 import Image from 'next/image';
 import Link from 'next/link';
 
