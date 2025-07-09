@@ -16,7 +16,8 @@
     "next-sanity": "^9.12.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "sanity": "^3.97.1"
+    "sanity": "^3.97.1",
+    "swiper": "^11.2.10"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

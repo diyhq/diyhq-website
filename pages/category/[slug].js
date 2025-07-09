@@ -5,15 +5,16 @@ import Link from 'next/link'
 import Image from 'next/image'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
+import PopularCarousel from '@/components/PopularCarousel'
 
 const client = createClient({
   projectId: 'plkjpsnw',
   dataset: 'production',
   useCdn: true,
-  apiVersion: '2023-07-06',
+  apiVersion: '2025-07-09',
 })
 
-const POSTS_PER_PAGE = 10;
+const POSTS_PER_PAGE = 10
 
 export async function getServerSideProps({ params, query }) {
   const { slug } = params
@@ -29,7 +30,13 @@ export async function getServerSideProps({ params, query }) {
   if (!category) return { notFound: true }
 
   const posts = await client.fetch(
-    `*[_type == "post" && references($catId)] | order(publishedAt desc)[$start...$end]{
+    `*[
+      _type == "post" &&
+      category.slug.current == $slug &&
+      defined(publishedAt) &&
+      publishedAt < now() &&
+      !(_id in path("drafts.**"))
+    ] | order(publishedAt desc)[$start...$end]{
       _id,
       title,
       slug,
@@ -39,12 +46,18 @@ export async function getServerSideProps({ params, query }) {
       },
       excerpt
     }`,
-    { catId: category._id, start, end }
+    { slug, start, end }
   )
 
   const total = await client.fetch(
-    `count(*[_type == "post" && references($catId)])`,
-    { catId: category._id }
+    `count(*[
+      _type == "post" &&
+      category.slug.current == $slug &&
+      defined(publishedAt) &&
+      publishedAt < now() &&
+      !(_id in path("drafts.**"))
+    ])`,
+    { slug }
   )
 
   return {
@@ -121,6 +134,7 @@ export default function CategoryPage({ category, posts, currentPage, totalPages 
         )}
 
         {renderPagination()}
+        <PopularCarousel categoryId={category._id} />
       </main>
     </>
   )

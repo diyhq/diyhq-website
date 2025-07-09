@@ -5,10 +5,28 @@ export default {
   fields: [
     { name: 'title', title: 'Title', type: 'string' },
     { name: 'slug', title: 'Slug', type: 'slug', options: { source: 'title', maxLength: 96 } },
+
+    // ✅ Added excerpt field for blog previews
+    {
+      name: 'excerpt',
+      title: 'Excerpt',
+      type: 'text',
+      description: 'Short summary shown on blog cards (1–2 sentences)'
+    },
+
     { name: 'mainImage', title: 'Main Image', type: 'image', options: { hotspot: true } },
     { name: 'publishedAt', title: 'Published at', type: 'datetime' },
 
-    // ✅ This is the missing key field
+    // ✅ Field for view tracking
+    {
+      name: 'views',
+      title: 'Views',
+      type: 'number',
+      initialValue: 0,
+      readOnly: false,
+      description: 'Number of times this post has been viewed',
+    },
+
     {
       name: 'category',
       title: 'Category',
