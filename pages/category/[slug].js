@@ -43,10 +43,11 @@ export default function CategoryPage({ slug, posts, currentPage, totalPages }) {
 
   return (
     <>
-      <Head>
-        <title>{capitalized} | DIY HQ</title>
-        <meta name="description" content={`DIY HQ blog posts in ${slug} category`} />
-      </Head>
+<Head>
+  <title>{`${capitalized} | DIY HQ`}</title>
+  <meta name="description" content={`DIY HQ blog posts in ${capitalized} category`} />
+</Head>
+
 
       <main className="min-h-screen flex flex-col items-center justify-start px-4 py-16">
         <div className="w-full max-w-5xl">
