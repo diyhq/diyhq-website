@@ -1,150 +1,105 @@
 // pages/category/[slug].js
 
-import { createClient } from 'next-sanity'
-import Link from 'next/link'
-import Image from 'next/image'
 import Head from 'next/head'
-import { useRouter } from 'next/router'
-import PopularCarousel from '../../components/PopularCarousel'
+import Link from 'next/link'
+import { sanityClient } from '../../lib/sanity'
 
-const client = createClient({
-  projectId: 'plkjpsnw',
-  dataset: 'production',
-  useCdn: true,
-  apiVersion: '2025-07-09',
-})
-
-const POSTS_PER_PAGE = 10
+const POSTS_PER_PAGE = 15
 
 export async function getServerSideProps({ params, query }) {
   const { slug } = params
-  const page = parseInt(query.page) || 1
-  const start = (page - 1) * POSTS_PER_PAGE
-  const end = start + POSTS_PER_PAGE
+  const currentPage = parseInt(query.page || '1', 10)
+  const start = (currentPage - 1) * POSTS_PER_PAGE
 
-  // ✅ Fetch the full category object
-  const category = await client.fetch(
-    `*[_type == "category" && slug.current == $slug][0]`,
-    { slug }
-  )
-  console.log("📦 Category Fetched:", category)
-
-  if (!category?._id) return { notFound: true }
-
-  // ✅ Fetch posts using category reference
-  const posts = await client.fetch(
-    `*[
-      _type == "post" &&
-      references($categoryId) &&
-      defined(publishedAt) &&
-      publishedAt < now() &&
-      !(_id in path("drafts.**"))
-    ] | order(publishedAt desc)[$start...$end]{
-      _id,
+  const totalQuery = `count(*[_type == "post" && category->slug.current == $slug])`
+  const postsQuery = `*[_type == "post" && category->slug.current == $slug]
+    | order(publishedAt desc)
+    [${start}...${start + POSTS_PER_PAGE}] {
       title,
       slug,
       publishedAt,
-      excerpt,
-      mainImage {
-        asset->{ url }
-      }
-    }`,
-    { categoryId: category._id, start, end }
-  )
-  console.log("🔥 Fetched Posts:", posts)
+      excerpt
+    }`
 
-  const total = await client.fetch(
-    `count(*[
-      _type == "post" &&
-      references($categoryId) &&
-      defined(publishedAt) &&
-      publishedAt < now() &&
-      !(_id in path("drafts.**"))
-    ])`,
-    { categoryId: category._id }
-  )
+  const [totalPosts, posts] = await Promise.all([
+    sanityClient.fetch(totalQuery, { slug }),
+    sanityClient.fetch(postsQuery, { slug }),
+  ])
+
+  const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE)
 
   return {
     props: {
-      category,
-      posts,
-      currentPage: page,
-      totalPages: Math.max(1, Math.ceil(total / POSTS_PER_PAGE)),
+      slug,
+      posts: posts || [], // fallback if null
+      currentPage,
+      totalPages,
     },
   }
 }
 
-export default function CategoryPage({ category, posts, currentPage, totalPages }) {
-  const router = useRouter()
-  const { slug } = router.query
-
-  console.log("🔄 Category Page Props:", { posts, currentPage, totalPages, category })
-
-  const renderPagination = () => {
-    const prev = currentPage > 1
-    const next = currentPage < totalPages
-    return (
-      <div className="flex justify-center mt-8 space-x-4">
-        {prev && (
-          <Link href={`/category/${slug}?page=${currentPage - 1}`} className="text-blue-600">← Previous</Link>
-        )}
-        <span className="text-gray-600">Page {currentPage} of {totalPages}</span>
-        {next && (
-          <Link href={`/category/${slug}?page=${currentPage + 1}`} className="text-blue-600">Next →</Link>
-        )}
-      </div>
-    )
-  }
+export default function CategoryPage({ slug, posts, currentPage, totalPages }) {
+  const capitalized = slug.replace(/-/g, ' ')
 
   return (
     <>
       <Head>
-        <title>{category.title} | DIY HQ</title>
-        <meta name="description" content={`Explore helpful guides and posts for ${category.title} at DIY HQ.`} />
+        <title>{capitalized} | DIY HQ</title>
+        <meta name="description" content={`DIY HQ blog posts in ${slug} category`} />
       </Head>
-      <main className="max-w-6xl mx-auto px-4 py-10">
-        <h1 className="text-3xl font-bold mb-6">{category.title}</h1>
 
-        <div className="space-y-6">
+      <main className="min-h-screen flex flex-col items-center justify-start px-4 py-16">
+        <div className="w-full max-w-5xl">
+          <h1 className="text-3xl font-bold text-center mb-10 capitalize">{capitalized}</h1>
+
           {posts.length === 0 ? (
-            <p className="text-gray-600">No posts found for this category yet.</p>
+            <p className="text-center text-gray-600">No posts found in this category.</p>
           ) : (
-            posts.map(post => (
-              <Link
-                key={post._id}
-                href={`/post/${post.slug.current}`}
-                className="flex bg-white rounded shadow hover:shadow-md transition overflow-hidden"
-              >
-                {post.mainImage?.asset?.url && (
-                  <div className="w-48 h-32 relative">
-                    <Image
-                      src={post.mainImage.asset.url}
-                      alt={post.title}
-                      layout="fill"
-                      objectFit="cover"
-                    />
-                  </div>
-                )}
-                <div className="p-4 flex-1">
-                  <h2 className="text-xl font-semibold mb-1">{post.title}</h2>
-                  <p className="text-sm text-gray-600">
-                    {new Date(post.publishedAt).toLocaleDateString()}
+            <ul className="space-y-12">
+              {posts.map((post) => (
+                <li key={post.slug?.current || post.title} className="border-b pb-6">
+                  {post.slug?.current ? (
+                    <Link
+                      href={`/post/${post.slug.current}`}
+                      className="text-2xl text-blue-600 hover:underline block"
+                    >
+                      {post.title}
+                    </Link>
+                  ) : (
+                    <span className="text-2xl text-gray-500">{post.title}</span>
+                  )}
+                  <p className="text-sm text-gray-500 mt-1">
+                    {post.publishedAt
+                      ? new Date(post.publishedAt).toLocaleDateString()
+                      : 'Date unknown'}
                   </p>
                   {post.excerpt && (
-                    <p className="text-sm text-gray-700 mt-1 line-clamp-2">{post.excerpt}</p>
+                    <p className="text-gray-700 mt-2">{post.excerpt}</p>
                   )}
-                </div>
-              </Link>
-            ))
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
 
-        {renderPagination()}
-
-        {/* ✅ Always render carousel */}
-        <div className="mt-12">
-          {category && <PopularCarousel categoryId={category._id} />}
-
+          {/* Pagination Controls */}
+          <div className="flex justify-center gap-4 mt-12">
+            {currentPage > 1 && (
+              <Link
+                href={`/category/${slug}?page=${currentPage - 1}`}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                ← Previous
+              </Link>
+            )}
+            {currentPage < totalPages && (
+              <Link
+                href={`/category/${slug}?page=${currentPage + 1}`}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Next →
+              </Link>
+            )}
+          </div>
         </div>
       </main>
     </>
