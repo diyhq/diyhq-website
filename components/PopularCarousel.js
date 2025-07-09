@@ -23,22 +23,34 @@ export default function PopularCarousel({ categoryId }) {
 
   useEffect(() => {
     async function fetchPopular() {
-      const query = `
-        *[_type == "post" && references($catId) && defined(views) && publishedAt >= now() - 90*24*60*60] 
-        | order(views desc)[0...5] {
-          _id,
-          title,
-          slug,
-          publishedAt,
-          views,
-          excerpt,
-          mainImage {
-            asset->{ url }
+      if (!categoryId) return
+
+      try {
+        const query = `
+          *[
+            _type == "post" &&
+            references($catId) &&
+            defined(views) &&
+            defined(publishedAt) &&
+            publishedAt < now()
+          ] | order(views desc)[0...5] {
+            _id,
+            title,
+            slug,
+            publishedAt,
+            views,
+            excerpt,
+            mainImage {
+              asset->{ url }
+            }
           }
-        }
-      `
-      const data = await client.fetch(query, { catId: categoryId })
-      setPopularPosts(data)
+        `
+        const data = await client.fetch(query, { catId: categoryId })
+        setPopularPosts(data)
+      } catch (err) {
+        console.error("🔥 Error fetching popular posts:", err)
+        setPopularPosts([]) // Prevent crash
+      }
     }
 
     fetchPopular()
@@ -79,8 +91,12 @@ export default function PopularCarousel({ categoryId }) {
                 )}
                 <div className="p-4">
                   <h3 className="text-md font-semibold mb-1">{post.title}</h3>
-                  <p className="text-sm text-gray-600">{new Date(post.publishedAt).toLocaleDateString()}</p>
-                  {post.excerpt && <p className="text-sm mt-2 text-gray-700">{post.excerpt}</p>}
+                  <p className="text-sm text-gray-600">
+                    {new Date(post.publishedAt).toLocaleDateString()}
+                  </p>
+                  {post.excerpt && (
+                    <p className="text-sm mt-2 text-gray-700">{post.excerpt}</p>
+                  )}
                 </div>
               </div>
             </Link>

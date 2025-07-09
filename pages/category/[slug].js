@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
-import PopularCarousel from '@/components/PopularCarousel'
+import PopularCarousel from '../../components/PopularCarousel'
 
 const client = createClient({
   projectId: 'plkjpsnw',
@@ -22,17 +22,20 @@ export async function getServerSideProps({ params, query }) {
   const start = (page - 1) * POSTS_PER_PAGE
   const end = start + POSTS_PER_PAGE
 
+  // ✅ Fetch the full category object
   const category = await client.fetch(
     `*[_type == "category" && slug.current == $slug][0]`,
     { slug }
   )
+  console.log("📦 Category Fetched:", category)
 
-  if (!category) return { notFound: true }
+  if (!category?._id) return { notFound: true }
 
+  // ✅ Fetch posts using category reference
   const posts = await client.fetch(
     `*[
       _type == "post" &&
-      category.slug.current == $slug &&
+      references($categoryId) &&
       defined(publishedAt) &&
       publishedAt < now() &&
       !(_id in path("drafts.**"))
@@ -41,23 +44,24 @@ export async function getServerSideProps({ params, query }) {
       title,
       slug,
       publishedAt,
+      excerpt,
       mainImage {
         asset->{ url }
-      },
-      excerpt
+      }
     }`,
-    { slug, start, end }
+    { categoryId: category._id, start, end }
   )
+  console.log("🔥 Fetched Posts:", posts)
 
   const total = await client.fetch(
     `count(*[
       _type == "post" &&
-      category.slug.current == $slug &&
+      references($categoryId) &&
       defined(publishedAt) &&
       publishedAt < now() &&
       !(_id in path("drafts.**"))
     ])`,
-    { slug }
+    { categoryId: category._id }
   )
 
   return {
@@ -65,7 +69,7 @@ export async function getServerSideProps({ params, query }) {
       category,
       posts,
       currentPage: page,
-      totalPages: Math.ceil(total / POSTS_PER_PAGE),
+      totalPages: Math.max(1, Math.ceil(total / POSTS_PER_PAGE)),
     },
   }
 }
@@ -73,6 +77,8 @@ export async function getServerSideProps({ params, query }) {
 export default function CategoryPage({ category, posts, currentPage, totalPages }) {
   const router = useRouter()
   const { slug } = router.query
+
+  console.log("🔄 Category Page Props:", { posts, currentPage, totalPages, category })
 
   const renderPagination = () => {
     const prev = currentPage > 1
@@ -99,11 +105,11 @@ export default function CategoryPage({ category, posts, currentPage, totalPages 
       <main className="max-w-6xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold mb-6">{category.title}</h1>
 
-        {posts.length === 0 ? (
-          <p className="text-gray-600">No posts found for this category yet.</p>
-        ) : (
-          <div className="space-y-6">
-            {posts.map(post => (
+        <div className="space-y-6">
+          {posts.length === 0 ? (
+            <p className="text-gray-600">No posts found for this category yet.</p>
+          ) : (
+            posts.map(post => (
               <Link
                 key={post._id}
                 href={`/post/${post.slug.current}`}
@@ -129,12 +135,17 @@ export default function CategoryPage({ category, posts, currentPage, totalPages 
                   )}
                 </div>
               </Link>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
 
         {renderPagination()}
-        <PopularCarousel categoryId={category._id} />
+
+        {/* ✅ Always render carousel */}
+        <div className="mt-12">
+          {category && <PopularCarousel categoryId={category._id} />}
+
+        </div>
       </main>
     </>
   )
