@@ -1,7 +1,7 @@
-// pages/sitemap.xml.js
-import { getAllPosts } from '@/lib/sanity'; // adjust to your fetch logic
+// pages/sitemap.js
+import { sanityClient } from '@/lib/sanity'; // this exists already
 
-const siteUrl = 'https://diyhq.vercel.app'; // or your real domain
+const siteUrl = 'https://diyhq.vercel.app';
 
 function generateSiteMap(posts) {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -10,7 +10,7 @@ function generateSiteMap(posts) {
         .map((post) => {
           return `
             <url>
-              <loc>${siteUrl}/post/${post.slug}</loc>
+              <loc>${siteUrl}/post/${post.slug.current}</loc>
               <lastmod>${new Date(post._updatedAt).toISOString()}</lastmod>
             </url>
           `;
@@ -21,7 +21,8 @@ function generateSiteMap(posts) {
 }
 
 export async function getServerSideProps({ res }) {
-  const posts = await getAllPosts(); // update based on your fetch function
+  const query = `*[_type == "post"]{ slug, _updatedAt }`;
+  const posts = await sanityClient.fetch(query);
 
   const sitemap = generateSiteMap(posts);
 
