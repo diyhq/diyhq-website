@@ -1,5 +1,5 @@
 // pages/sitemap.xml.js
-import { getAllPosts } from '@/lib/sanity-utils'; // adjust to your fetch logic
+import { getAllPosts } from '@/lib/sanity'; // adjust to your fetch logic
 
 const siteUrl = 'https://diyhq.vercel.app'; // or your real domain
 
