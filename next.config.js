@@ -1,4 +1,3 @@
-// next.config.js
 const nextConfig = {
   reactStrictMode: true,
   images: {
@@ -14,6 +13,15 @@ const nextConfig = {
             value: "no-store",
           },
         ],
+      },
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: '/sitemap.xml',
+        destination: '/api/sitemap',
+        permanent: true,
       },
     ];
   },
