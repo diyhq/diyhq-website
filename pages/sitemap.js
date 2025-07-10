@@ -1,4 +1,4 @@
-// pages/sitemap.xml.js
+// pages/sitemap.js
 import { sanityClient } from '../lib/sanity';
 
 const siteUrl = 'https://diyhq.vercel.app';
