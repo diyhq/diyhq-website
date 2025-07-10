@@ -1,8 +1,6 @@
 // pages/sitemap.xml.js
 import { sanityClient } from '../lib/sanity';
 
-const siteUrl = 'https://diyhq.vercel.app';
-
 export async function getServerSideProps({ res }) {
   const query = `*[_type == "post"]{ slug, _updatedAt }`;
   const posts = await sanityClient.fetch(query);
@@ -13,7 +11,7 @@ export async function getServerSideProps({ res }) {
     .map((post) => {
       return `
     <url>
-      <loc>${siteUrl}/post/${post.slug.current}</loc>
+      <loc>https://diyhq.vercel.app/post/${post.slug.current}</loc>
       <lastmod>${new Date(post._updatedAt).toISOString()}</lastmod>
     </url>`;
     })
@@ -24,9 +22,12 @@ export async function getServerSideProps({ res }) {
   res.write(sitemap);
   res.end();
 
-  return { props: {} };
+  return {
+    props: {},
+  };
 }
 
 export default function Sitemap() {
+  // getServerSideProps handles the response
   return null;
 }
