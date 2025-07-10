@@ -1,5 +1,5 @@
 // pages/sitemap.js
-import { sanityClient } from '@/lib/sanity'; // this exists already
+import { sanityClient } from '../lib/sanity'; // this exists already
 
 const siteUrl = 'https://diyhq.vercel.app';
 
