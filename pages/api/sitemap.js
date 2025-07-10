@@ -3,17 +3,13 @@ export default async function handler(req, res) {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://diyhq.vercel.app/</loc>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://diyhq.vercel.app/about</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>1.0</priority>
   </url>
 </urlset>`;
 
-  res.setHeader('Content-Type', 'application/xml');
+  res.setHeader("Content-Type", "application/xml");
+  res.setHeader("Cache-Control", "no-store");
   res.write(sitemap);
   res.end();
 }
