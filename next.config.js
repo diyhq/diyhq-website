@@ -11,7 +11,7 @@ const nextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "no-store", // Force no caching for sitemap
+            value: "no-store",
           },
         ],
       },
