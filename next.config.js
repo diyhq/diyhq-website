@@ -1,5 +1,6 @@
 const nextConfig = {
   reactStrictMode: true,
+  trailingSlash: false, // ← ADD THIS LINE
   images: {
     domains: ['cdn.sanity.io'],
   },
@@ -19,8 +20,8 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/sitemap.xml',
-        destination: '/api/sitemap',
+        source: "/sitemap.xml",
+        destination: "/api/sitemap",
         permanent: true,
       },
     ];
