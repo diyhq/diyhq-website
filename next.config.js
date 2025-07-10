@@ -1,4 +1,4 @@
-// next.config.js
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   images: {
@@ -8,7 +8,7 @@ const nextConfig = {
     return [
       {
         source: '/sitemap.xml',
-        destination: '/sitemap', // maps cleanly
+        destination: '/api/sitemap',
       },
     ];
   },
