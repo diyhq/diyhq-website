@@ -1,24 +1,30 @@
-// pages/sitemap.xml.js
+// next.config.js
+const nextConfig = {
+  reactStrictMode: true,
+  images: {
+    domains: ['cdn.sanity.io'],
+  },
+  async headers() {
+    return [
+      {
+        source: "/sitemap.xml",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store",
+          },
+        ],
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/sitemap.xml",
+        destination: "/sitemap", // 👈 maps to your dynamic server file
+      },
+    ];
+  },
+};
 
-export async function getServerSideProps({ res }) {
-  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-  <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-    <url>
-      <loc>https://diyhq.vercel.app/post/test-for-the-best-drill</loc>
-      <lastmod>${new Date().toISOString()}</lastmod>
-    </url>
-  </urlset>`;
-
-  res.setHeader("Content-Type", "text/xml");
-  res.write(sitemap);
-  res.end();
-
-  return {
-    props: {},
-  };
-}
-
-// ✅ Required to prevent build failure
-export default function Sitemap() {
-  return null;
-}
+module.exports = nextConfig;
