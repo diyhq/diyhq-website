@@ -10,6 +10,13 @@ export default defineConfig({
   projectId: 'plkjpsnw',
   dataset: 'production',
 
+  // 🔒 Add this block to disable devtools in deployed Studio
+  studio: {
+    projectStudioOptions: {
+      devtools: false
+    }
+  },
+
   plugins: [structureTool(), visionTool()],
 
   schema: {
