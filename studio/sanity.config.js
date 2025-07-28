@@ -1,7 +1,9 @@
-import {defineConfig} from 'sanity'
-import {structureTool} from 'sanity/structure'
-import {visionTool} from '@sanity/vision'
-import {schemaTypes} from './schemaTypes'
+import { defineConfig } from 'sanity';
+import { deskTool } from 'sanity/desk';
+import { visionTool } from '@sanity/vision';
+import { media } from 'sanity-plugin-media';
+
+import schemaTypes from './schemas';
 
 export default defineConfig({
   name: 'default',
@@ -10,16 +12,13 @@ export default defineConfig({
   projectId: 'plkjpsnw',
   dataset: 'production',
 
-  // 🔒 Add this block to disable devtools in deployed Studio
-  studio: {
-    projectStudioOptions: {
-      devtools: false
-    }
-  },
-
-  plugins: [structureTool(), visionTool()],
+  plugins: [
+    media(),
+    deskTool(),
+    visionTool(),
+  ],
 
   schema: {
     types: schemaTypes,
   },
-})
+});
