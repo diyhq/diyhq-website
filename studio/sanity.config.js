@@ -23,3 +23,4 @@ export default defineConfig({
     types: schemaTypes,
   },
 })
+//just a random code phrase
