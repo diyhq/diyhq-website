@@ -22,3 +22,4 @@ export default defineConfig({
     types: schemaTypes,
   },
 });
+// Triger rebuild
