@@ -1,9 +1,10 @@
-import { defineConfig } from 'sanity';
-import { deskTool } from 'sanity/desk';
-import { visionTool } from '@sanity/vision';
-import { media } from 'sanity-plugin-media';
+import { defineConfig } from 'sanity'
+import { deskTool } from 'sanity/desk'
+import { visionTool } from '@sanity/vision'
+import { media } from 'sanity-plugin-media'
 
-import schemaTypes from './schemas';
+// ✅ Correct path based on your actual folder name
+import schemaTypes from './schemaTypes/index.js'
 
 export default defineConfig({
   name: 'default',
@@ -21,5 +22,4 @@ export default defineConfig({
   schema: {
     types: schemaTypes,
   },
-});
-// Triger rebuild
+})
