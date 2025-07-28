@@ -2,8 +2,8 @@ import { defineConfig } from 'sanity'
 import { deskTool } from 'sanity/desk'
 import { visionTool } from '@sanity/vision'
 import { media } from 'sanity-plugin-media'
+import structure from './structure'
 
-// ✅ Correct path based on your actual folder name
 import schemaTypes from './schemaTypes/index.js'
 
 export default defineConfig({
@@ -15,7 +15,7 @@ export default defineConfig({
 
   plugins: [
     media(),
-    deskTool(),
+    deskTool({ structure }),
     visionTool(),
   ],
 
@@ -23,4 +23,3 @@ export default defineConfig({
     types: schemaTypes,
   },
 })
-//just a random code phrase
