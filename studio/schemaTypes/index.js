@@ -1,4 +1,4 @@
-import post from '../schemas/post.js'
+import post from './post'
+import category from './category'
 
-const schemaTypes = [post]
-export default schemaTypes
+export const schemaTypes = [post, category]
