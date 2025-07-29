@@ -4,7 +4,7 @@ import { media } from 'sanity-plugin-media'
 import { visionTool } from '@sanity/vision'
 
 import { schemaTypes } from './schemaTypes'
-import structure from './structure'
+import { structure } from './structure'
 
 export default defineConfig({
   name: 'default',
@@ -16,20 +16,21 @@ export default defineConfig({
   plugins: [
     deskTool({ structure }),
     visionTool(),
-    media() // ✅ MEDIA ONLY GOES HERE
+    media() // ✅ media plugin enabled
   ],
 
   tools: [
     deskTool({ structure }),
-    visionTool() // ✅ DO NOT list media() here
+    visionTool()
   ],
 
   schema: {
-    types: schemaTypes
+    types: schemaTypes,
   },
 
   document: {
-    productionUrl: async (prev, { document }) =>
-      `https://doityourselfhq.com/post/${document.slug?.current}`
-  }
+    productionUrl: async (prev, { document }) => {
+      return `https://doityourselfhq.com/post/${document.slug?.current}`
+    },
+  },
 })
