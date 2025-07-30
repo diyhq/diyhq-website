@@ -1,5 +1,4 @@
 // /studio/schemaTypes/index.js
-
 import post from './post'
 import category from './category'
 import blockContent from './blockContent'
