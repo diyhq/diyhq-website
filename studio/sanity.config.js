@@ -12,7 +12,7 @@ export default defineConfig({
   dataset: 'production',
 
   tools: [
-    deskTool(), // ← remove structure override for sidebar view
+    deskTool({ defaultLayout: true }), // ✅ Forces left sidebar to load
     visionTool(),
     media(),
   ],
