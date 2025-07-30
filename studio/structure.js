@@ -1,4 +1,6 @@
-export default (S) =>
+// studio/structure.js
+
+export const structure = (S) =>
   S.list()
     .title('Content')
     .items([
