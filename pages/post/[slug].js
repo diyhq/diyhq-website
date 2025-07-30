@@ -1,69 +1,90 @@
-// /pages/post/[slug].js
-import { groq } from 'next-sanity'
-import { getClient } from '../../lib/sanity' // ✅ correct import for your setup
-import Image from 'next/image'
-import Head from 'next/head'
+import { useRouter } from 'next/router';
+import Head from 'next/head';
+import { sanityClient, urlFor } from '../../lib/sanity';
+import PortableText from '@portabletext/react';
 
-const postQuery = groq`
-  *[_type == "post" && slug.current == $slug][0]{
-    title,
-    publishedAt,
-    slug,
-    mainImage { asset->{ url } },
-    excerpt,
-    body,
-    authorAIName,
-    imageAlt,
-    category->{title, slug}
+export default function Post({ post }) {
+  const router = useRouter();
+
+  // Show loading state on first build or fallback
+  if (router.isFallback) {
+    return <p>Loading...</p>;
   }
-`
 
-export async function getStaticProps({ params }) {
-  const post = await getClient().fetch(postQuery, { slug: params.slug })
-  return {
-    props: { post },
-    revalidate: 60,
+  if (!post) {
+    return <p>Post not found.</p>;
   }
-}
-
-export async function getStaticPaths() {
-  const slugs = await getClient().fetch(
-    groq`*[_type == "post" && defined(slug.current)][].slug.current`
-  )
-  return {
-    paths: slugs.map(slug => ({ params: { slug } })),
-    fallback: 'blocking',
-  }
-}
-
-export default function PostPage({ post }) {
-  if (!post) return <p>Loading...</p>
 
   return (
     <>
       <Head>
         <title>{post.title} | DIY HQ</title>
-        <meta name="description" content={post.excerpt || post.imageAlt} />
       </Head>
-      <article className="max-w-3xl mx-auto p-4">
-        <h1 className="text-3xl font-bold mb-2">{post.title}</h1>
-        <p className="text-sm text-gray-500 mb-4">
-          Published on {new Date(post.publishedAt).toLocaleDateString()}
-        </p>
-        {post.mainImage?.asset?.url && (
-          <Image
-            src={post.mainImage.asset.url}
-            alt={post.imageAlt || post.title}
-            width={800}
-            height={500}
-            className="rounded mb-4"
+      <main className="max-w-3xl mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
+        {post.mainImage?.asset?._ref && (
+          <img
+            src={urlFor(post.mainImage).width(800).url()}
+            alt={post.title}
+            className="w-full rounded-lg mb-4"
           />
         )}
-        <section className="prose">
-          <pre>{JSON.stringify(post.body, null, 2)}</pre>
-        </section>
-        <p className="mt-8 text-sm text-right italic">Written by {post.authorAIName}</p>
-      </article>
+        <div className="text-sm text-gray-500 mb-2">
+          {new Date(post.publishedAt).toLocaleDateString()}
+        </div>
+        <article className="prose">
+          <PortableText value={post.body} />
+        </article>
+      </main>
     </>
-  )
+  );
+}
+
+export async function getStaticProps({ params }) {
+  const slug = params?.slug;
+
+  const query = `*[_type == "post" && slug.current == $slug][0]{
+    _id,
+    title,
+    slug,
+    body,
+    mainImage,
+    publishedAt,
+    category->{title},
+    authorAIName
+  }`;
+
+  const post = await sanityClient.fetch(query, { slug });
+
+  console.log('🧠 DEBUG POST:', post); // will show in Vercel logs
+
+  if (!post) {
+    return {
+      notFound: true,
+    };
+  }
+
+  return {
+    props: {
+      post,
+    },
+    revalidate: 60,
+  };
+}
+
+export async function getStaticPaths() {
+  const query = `*[_type == "post" && defined(slug.current)][]{
+    "slug": slug.current
+  }`;
+
+  const posts = await sanityClient.fetch(query);
+
+  const paths = posts.map((post) => ({
+    params: { slug: post.slug },
+  }));
+
+  return {
+    paths,
+    fallback: true,
+  };
 }
