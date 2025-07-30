@@ -23,3 +23,4 @@ export default defineConfig({
     types: schemaTypes,
   },
 })
+//force rebuild
