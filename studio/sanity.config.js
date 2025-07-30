@@ -1,5 +1,3 @@
-// /studio/sanity.config.js
-
 import { defineConfig } from 'sanity'
 import { deskTool } from 'sanity/desk'
 import { visionTool } from '@sanity/vision'
@@ -14,15 +12,7 @@ export default defineConfig({
   dataset: 'production',
 
   tools: [
-    deskTool({
-      structure: (S) =>
-        S.list()
-          .title('Content')
-          .items([
-            S.documentTypeListItem('post').title('Posts'),
-            S.documentTypeListItem('category').title('Categories'),
-          ]),
-    }),
+    deskTool(), // ← remove structure override for sidebar view
     visionTool(),
     media(),
   ],

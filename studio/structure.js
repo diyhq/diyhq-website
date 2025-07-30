@@ -1,9 +1,0 @@
-// studio/structure.js
-
-export const structure = (S) =>
-  S.list()
-    .title('Content')
-    .items([
-      S.documentTypeListItem('post').title('Posts'),
-      S.documentTypeListItem('category').title('Categories'),
-    ])
