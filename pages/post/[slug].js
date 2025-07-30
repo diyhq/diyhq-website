@@ -78,6 +78,9 @@ export async function getStaticPaths() {
 
   const posts = await sanityClient.fetch(query);
 
+  // ✅ NEW: Log the slugs detected at build time
+  console.log('🚨 SLUGS:', posts.map((p) => p.slug));
+
   const paths = posts.map((post) => ({
     params: { slug: post.slug },
   }));
