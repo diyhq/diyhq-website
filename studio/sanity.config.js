@@ -2,9 +2,7 @@ import { defineConfig } from 'sanity'
 import { deskTool } from 'sanity/desk'
 import { visionTool } from '@sanity/vision'
 import { media } from 'sanity-plugin-media'
-import { structure } from './structure'
-
-// ✅ Matches your current export
+import structure from './structure'
 import { schemaTypes } from './schemaTypes'
 
 export default defineConfig({
@@ -15,7 +13,7 @@ export default defineConfig({
   dataset: 'production',
 
   tools: [
-    deskTool({ structure }),
+    deskTool({ structure }), // ✅ correct now
     visionTool(),
     media(),
   ],
