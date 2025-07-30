@@ -1,80 +1,66 @@
-// pages/post/[slug].js
-
+// /pages/post/[slug].js
+import { groq } from 'next-sanity'
+import { getClient } from '../../lib/sanity.client'
 import Image from 'next/image'
 import Head from 'next/head'
-import { useRouter } from 'next/router'
-import { sanityClient } from '../../lib/sanity'
 
-export async function getServerSideProps({ params }) {
-  const { slug } = params
-
-  const query = `*[_type == "post" && slug.current == $slug][0]{
+const postQuery = groq`
+  *[_type == "post" && slug.current == $slug][0]{
     title,
     publishedAt,
-    mainImage {
-      asset->{ url }
-    },
+    slug,
+    mainImage { asset->{ url } },
     excerpt,
     body,
-    authorAIName
-  }`
-
-  const post = await sanityClient.fetch(query, { slug })
-
-  if (!post) {
-    return {
-      notFound: true,
-    }
+    authorAIName,
+    imageAlt
   }
+`
 
+export async function getStaticProps({ params }) {
+  const post = await getClient().fetch(postQuery, { slug: params.slug })
   return {
-    props: {
-      post,
-    },
+    props: { post },
+    revalidate: 60, // ISR
+  }
+}
+
+export async function getStaticPaths() {
+  const slugs = await getClient().fetch(
+    groq`*[_type == "post" && defined(slug.current)][].slug.current`
+  )
+  return {
+    paths: slugs.map(slug => ({ params: { slug } })),
+    fallback: 'blocking',
   }
 }
 
 export default function PostPage({ post }) {
-  const router = useRouter()
-
-  if (router.isFallback) {
-    return <p>Loading…</p>
-  }
+  if (!post) return <p>Loading...</p>
 
   return (
     <>
       <Head>
         <title>{post.title} | DIY HQ</title>
-        <meta name="description" content={post.excerpt || 'DIY HQ Blog Post'} />
+        <meta name="description" content={post.excerpt || post.imageAlt} />
       </Head>
-      <main className="max-w-4xl mx-auto px-4 py-10">
-        <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
-        <p className="text-gray-500 text-sm mb-6">
-          {new Date(post.publishedAt).toLocaleDateString()} {post.authorAIName && ` | by ${post.authorAIName}`}
+      <article className="max-w-3xl mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-2">{post.title}</h1>
+        <p className="text-sm text-gray-500 mb-4">
+          Published on {new Date(post.publishedAt).toLocaleDateString()}
         </p>
         {post.mainImage?.asset?.url && (
-          <div className="w-full h-80 relative mb-6">
-            <Image
-              src={post.mainImage.asset.url}
-              alt={post.title}
-              layout="fill"
-              objectFit="cover"
-              className="rounded"
-            />
-          </div>
+          <Image
+            src={post.mainImage.asset.url}
+            alt={post.imageAlt || post.title}
+            width={800}
+            height={500}
+            className="rounded mb-4"
+          />
         )}
-        {post.body && (
-          <div className="prose max-w-none">
-            {Array.isArray(post.body) ? (
-              post.body.map((block, i) => (
-                <p key={i}>{typeof block === 'string' ? block : JSON.stringify(block)}</p>
-              ))
-            ) : (
-              <p>{post.body}</p>
-            )}
-          </div>
-        )}
-      </main>
+        <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(post.body, null, 2)}</pre>
+        <p className="mt-8 text-sm text-right italic">Written by {post.authorAIName}</p>
+      </article>
     </>
   )
 }
