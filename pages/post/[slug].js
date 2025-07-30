@@ -1,12 +1,11 @@
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { sanityClient, urlFor } from '../../lib/sanity';
-import PortableText from '@portabletext/react';
+import { PortableText } from '@portabletext/react';
 
 export default function Post({ post }) {
   const router = useRouter();
 
-  // Show loading state on first build or fallback
   if (router.isFallback) {
     return <p>Loading...</p>;
   }
@@ -56,7 +55,7 @@ export async function getStaticProps({ params }) {
 
   const post = await sanityClient.fetch(query, { slug });
 
-  console.log('🧠 DEBUG POST:', post); // will show in Vercel logs
+  console.log('🧠 DEBUG POST:', post);
 
   if (!post) {
     return {
