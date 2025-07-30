@@ -2,20 +2,25 @@ import { defineConfig } from 'sanity'
 import { deskTool } from 'sanity/desk'
 import { visionTool } from '@sanity/vision'
 import { media } from 'sanity-plugin-media'
-import { schemaTypes } from './schemas'
-import { structure } from './deskStructure'
+import { structure } from './structure'
+
+// ✅ Matches your current export
+import { schemaTypes } from './schemaTypes'
 
 export default defineConfig({
   name: 'default',
   title: 'DIY HQ Blog',
+
   projectId: 'plkjpsnw',
   dataset: 'production',
 
   tools: [
     deskTool({ structure }),
     visionTool(),
-    media(), // Enables the “Media” tab
+    media(),
   ],
 
-  schema: { types: schemaTypes },
+  schema: {
+    types: schemaTypes,
+  },
 })
