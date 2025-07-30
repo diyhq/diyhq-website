@@ -2,30 +2,24 @@ import { defineConfig } from 'sanity'
 import { deskTool } from 'sanity/desk'
 import { visionTool } from '@sanity/vision'
 import { media } from 'sanity-plugin-media'
-
-import { schemaTypes } from './schemaTypes'
-import { structure } from './structure'
+import { schemaTypes } from './schemas'
+import { structure } from './deskStructure'
 
 export default defineConfig({
   name: 'default',
-  title: 'DIY HQ Studio',
-
+  title: 'DIY HQ Blog',
   projectId: 'plkjpsnw',
   dataset: 'production',
 
+  plugins: [], // 🔕 No longer needed — replaced with `tools`
+
   tools: [
-    deskTool({ structure }),
-    visionTool(),
-    media(), // ✅ put media tool here
+    deskTool({ structure }), // ✅ Keeps your custom desk layout
+    visionTool(),            // ✅ Optional but working fine
+    media(),                 // ✅ Shows "Media" tab in sidebar
   ],
 
   schema: {
     types: schemaTypes,
-  },
-
-  document: {
-    productionUrl: async (prev, { document }) => {
-      return `https://doityourselfhq.com/post/${document.slug?.current}`
-    },
   },
 })
