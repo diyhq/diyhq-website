@@ -1,6 +1,6 @@
 // /pages/post/[slug].js
 import { groq } from 'next-sanity'
-import { getClient } from '../../lib/sanity.client'
+import { getClient } from '../../lib/sanity' // ✅ correct import for your setup
 import Image from 'next/image'
 import Head from 'next/head'
 
@@ -13,7 +13,8 @@ const postQuery = groq`
     excerpt,
     body,
     authorAIName,
-    imageAlt
+    imageAlt,
+    category->{title, slug}
   }
 `
 
@@ -21,7 +22,7 @@ export async function getStaticProps({ params }) {
   const post = await getClient().fetch(postQuery, { slug: params.slug })
   return {
     props: { post },
-    revalidate: 60, // ISR
+    revalidate: 60,
   }
 }
 
@@ -58,7 +59,9 @@ export default function PostPage({ post }) {
             className="rounded mb-4"
           />
         )}
-        <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(post.body, null, 2)}</pre>
+        <section className="prose">
+          <pre>{JSON.stringify(post.body, null, 2)}</pre>
+        </section>
         <p className="mt-8 text-sm text-right italic">Written by {post.authorAIName}</p>
       </article>
     </>
