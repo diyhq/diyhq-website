@@ -11,16 +11,11 @@ export default defineConfig({
   projectId: 'plkjpsnw',
   dataset: 'production',
 
-  plugins: [], // 🔕 No longer needed — replaced with `tools`
-
   tools: [
-    deskTool({ structure }), // ✅ Keeps your custom desk layout
-    visionTool(),            // ✅ Optional but working fine
-    media(),                 // ✅ Shows "Media" tab in sidebar
+    deskTool({ structure }),
+    visionTool(),
+    media(), // Enables the “Media” tab
   ],
 
-  schema: {
-    types: schemaTypes,
-  },
+  schema: { types: schemaTypes },
 })
-// Trigger
