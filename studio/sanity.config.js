@@ -17,7 +17,7 @@ export default defineConfig({
     deskTool({
       structure: (S) =>
         S.list()
-          .title('Main')
+          .title('Content')
           .items([
             S.documentTypeListItem('post').title('Posts'),
             S.documentTypeListItem('category').title('Categories'),
@@ -29,12 +29,5 @@ export default defineConfig({
 
   schema: {
     types: schemaTypes,
-  },
-
-  // Optional: Removes extra UI (like releases nav bar if it's stuck)
-  __experimental_theme: {
-    components: {
-      navbar: () => null,
-    },
   },
 })
