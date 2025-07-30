@@ -1,7 +1,7 @@
 import { defineConfig } from 'sanity'
 import { deskTool } from 'sanity/desk'
-import { media } from 'sanity-plugin-media'
 import { visionTool } from '@sanity/vision'
+import { media } from 'sanity-plugin-media'
 
 import { schemaTypes } from './schemaTypes'
 import { structure } from './structure'
@@ -13,15 +13,10 @@ export default defineConfig({
   projectId: 'plkjpsnw',
   dataset: 'production',
 
-  plugins: [
-    deskTool({ structure }),
-    visionTool(),
-    media() // ✅ media plugin enabled
-  ],
-
   tools: [
     deskTool({ structure }),
-    visionTool()
+    visionTool(),
+    media(), // ✅ put media tool here
   ],
 
   schema: {
