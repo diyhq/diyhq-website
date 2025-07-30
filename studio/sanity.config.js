@@ -1,7 +1,8 @@
+// /studio/sanity.config.js
 import { defineConfig } from 'sanity'
 import { deskTool } from 'sanity/desk'
 import { visionTool } from '@sanity/vision'
-import { media } from 'sanity-plugin-media'
+import { media } from 'sanity-plugin-media' // optional
 import { schemaTypes } from './schemaTypes'
 
 export default defineConfig({
@@ -12,9 +13,9 @@ export default defineConfig({
   dataset: 'production',
 
   tools: [
-    deskTool({ defaultLayout: true }), // ✅ Forces left sidebar to load
+    deskTool(),
     visionTool(),
-    media(),
+    media(), // remove this line if media crashes again
   ],
 
   schema: {
