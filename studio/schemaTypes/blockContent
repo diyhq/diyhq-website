@@ -1,4 +1,5 @@
-// /schemas/blockContent.js
+// /studio/schemaTypes/blockContent.js
+
 export default {
   name: 'blockContent',
   title: 'Block Content',

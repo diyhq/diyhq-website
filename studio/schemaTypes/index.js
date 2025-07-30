@@ -2,6 +2,6 @@
 
 import post from './post'
 import category from './category'
-import blockContent from './blockContent'  // ✅ Add this line
+import blockContent from './blockContent'
 
-export const schemaTypes = [post, category, blockContent]  // ✅ Include here
+export const schemaTypes = [post, category, blockContent]
