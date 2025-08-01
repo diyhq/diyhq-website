@@ -1,38 +1,61 @@
-import { groq } from 'next-sanity'
-import { getClient } from '../../lib/sanity.server'
-import Head from 'next/head'
+import { useRouter } from 'next/router';
+import Head from 'next/head';
+import { sanityClient } from '../../lib/sanity';
+import Link from 'next/link';
 
-export async function getStaticPaths() {
-  const query = groq`*[_type == "category"]{ "slug": slug }`
-  const categories = await getClient().fetch(query)
+export default function CategoryPage({ category, posts }) {
+  const router = useRouter();
 
-  const paths = categories.map((cat) => ({
-    params: { slug: cat.slug?.current || cat.slug }
-  }))
-
-  return {
-    paths,
-    fallback: false,
+  if (router.isFallback) {
+    return <p>Loading...</p>;
   }
+
+  if (!category) {
+    return <p>Category not found.</p>;
+  }
+
+  return (
+    <>
+      <Head>
+        <title>{category.title} | DIY HQ</title>
+      </Head>
+      <main className="max-w-4xl mx-auto p-4">
+        <h1 className="text-4xl font-bold mb-6">{category.title}</h1>
+        {posts.length === 0 ? (
+          <p>No posts in this category yet.</p>
+        ) : (
+          <ul className="space-y-4">
+            {posts.map((post) => (
+              <li key={post._id}>
+                <Link href={`/post/${post.slug.current}`}>
+                  <a className="text-blue-600 hover:underline text-xl font-semibold">
+                    {post.title}
+                  </a>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </>
+  );
 }
 
 export async function getStaticProps({ params }) {
-  const { slug } = params
+  const categoryQuery = `*[_type == "category" && slug.current == $slug][0]`;
+  const postsQuery = `*[_type == "post" && category->slug.current == $slug]{
+    _id,
+    title,
+    slug
+  }`;
 
-  const categoryQuery = groq`
-    *[_type == "category" && slug.current == $slug][0]
-  `
-  const postsQuery = groq`
-    *[_type == "post" && references(*[_type == "category" && slug.current == $slug]._id)] | order(_createdAt desc) {
-      _id, title, slug, mainImage, publishedAt, body
-    }
-  `
-
-  const category = await getClient().fetch(categoryQuery, { slug })
-  const posts = await getClient().fetch(postsQuery, { slug })
+  const category = await sanityClient.fetch(categoryQuery, { slug: params.slug });
+  const posts = await sanityClient.fetch(postsQuery, { slug: params.slug });
 
   if (!category) {
-    return { notFound: true }
+    return {
+      notFound: true,
+    };
   }
 
   return {
@@ -40,29 +63,23 @@ export async function getStaticProps({ params }) {
       category,
       posts,
     },
-  }
+    revalidate: 60,
+  };
 }
 
-export default function CategoryPage({ category, posts }) {
-  return (
-    <>
-      <Head>
-        <title>{category.title} – DIY HQ</title>
-      </Head>
-      <main>
-        <h1>{category.title}</h1>
-        {posts.length === 0 ? (
-          <p>No posts in this category yet.</p>
-        ) : (
-          <ul>
-            {posts.map((post) => (
-              <li key={post._id}>
-                <a href={`/post/${post.slug.current}`}>{post.title}</a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
-    </>
-  )
+export async function getStaticPaths() {
+  const query = `*[_type == "category" && defined(slug.current)][]{
+    "slug": slug.current
+  }`;
+
+  const categories = await sanityClient.fetch(query);
+
+  const paths = categories.map((category) => ({
+    params: { slug: category.slug },
+  }));
+
+  return {
+    paths,
+    fallback: true,
+  };
 }
