@@ -65,7 +65,7 @@ export async function getStaticProps({ params }) {
     props: {
       post,
     },
-    revalidate: 60, // ISR support
+    revalidate: 60,
   };
 }
 
@@ -76,9 +76,11 @@ export async function getStaticPaths() {
 
   const posts = await sanityClient.fetch(query);
 
-  const paths = posts.map((post) => ({
-    params: { slug: post.slug }, // ✅ plain string
-  }));
+  const paths = posts
+    .filter(post => typeof post.slug === 'string')
+    .map(post => ({
+      params: { slug: post.slug }, // ✅ Fixed: slug is a plain string
+    }));
 
   return {
     paths,
