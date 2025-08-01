@@ -18,26 +18,20 @@ export default function Post({ post }) {
     <>
       <Head>
         <title>{post.title} | DIY HQ</title>
-        <meta name="description" content={post.seoDescription || 'DIY HQ blog post'} />
+        <meta name="description" content={post.seoDescription || ''} />
       </Head>
-
       <main className="max-w-3xl mx-auto p-4">
         <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
-
-        {post.mainImage?.asset && (
+        {post.mainImage?.asset?._ref && (
           <img
             src={urlFor(post.mainImage).width(800).url()}
-            alt={post.title}
+            alt={post.imageAlt || post.title}
             className="w-full rounded-lg mb-4"
           />
         )}
-
         <div className="text-sm text-gray-500 mb-2">
-          {post.publishedAt
-            ? new Date(post.publishedAt).toLocaleDateString()
-            : 'Date unknown'}
+          {new Date(post.publishedAt).toLocaleDateString()}
         </div>
-
         <article className="prose">
           <PortableText value={post.body} />
         </article>
@@ -55,10 +49,11 @@ export async function getStaticProps({ params }) {
     slug,
     body,
     mainImage,
+    imageAlt,
     publishedAt,
-    seoDescription,
     category->{title},
-    authorAIName
+    authorAIName,
+    seoDescription
   }`;
 
   const post = await sanityClient.fetch(query, { slug });
@@ -79,13 +74,13 @@ export async function getStaticProps({ params }) {
 
 export async function getStaticPaths() {
   const query = `*[_type == "post" && defined(slug.current)][] {
-    "slug": slug.current
+    slug
   }`;
 
   const posts = await sanityClient.fetch(query);
 
   const paths = posts.map((post) => ({
-    params: { slug: post.slug }, // ✅ Now correctly a string
+    params: { slug: post.slug.current }, // ✅ Must be a string
   }));
 
   return {
