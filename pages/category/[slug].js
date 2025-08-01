@@ -11,14 +11,14 @@ export async function getServerSideProps({ params, query }) {
   const currentPage = parseInt(query.page || '1', 10)
   const start = (currentPage - 1) * POSTS_PER_PAGE
 
-  const totalQuery = `count(*[_type == "post" && category->slug.current == $slug])`
-  const postsQuery = `*[_type == "post" && category->slug.current == $slug]
+  const totalQuery = `count(*[_type == "post" && defined(publishedAt) && publishedAt < now() && category->slug.current == $slug])`
+  const postsQuery = `*[_type == "post" && defined(publishedAt) && publishedAt < now() && category->slug.current == $slug]
     | order(publishedAt desc)
     [${start}...${start + POSTS_PER_PAGE}] {
       title,
       slug,
       publishedAt,
-      excerpt
+      excerpt: coalesce(seoDescription, "")
     }`
 
   const [totalPosts, posts] = await Promise.all([
@@ -31,7 +31,7 @@ export async function getServerSideProps({ params, query }) {
   return {
     props: {
       slug,
-      posts: posts || [], // fallback if null
+      posts: posts || [],
       currentPage,
       totalPages,
     },
@@ -43,11 +43,10 @@ export default function CategoryPage({ slug, posts, currentPage, totalPages }) {
 
   return (
     <>
-<Head>
-  <title>{`${capitalized} | DIY HQ`}</title>
-  <meta name="description" content={`DIY HQ blog posts in ${capitalized} category`} />
-</Head>
-
+      <Head>
+        <title>{`${capitalized} | DIY HQ`}</title>
+        <meta name="description" content={`DIY HQ blog posts in ${capitalized} category`} />
+      </Head>
 
       <main className="min-h-screen flex flex-col items-center justify-start px-4 py-16">
         <div className="w-full max-w-5xl">
