@@ -1,106 +1,67 @@
-// pages/category/[slug].js
-
+import { groq } from 'next-sanity'
+import { getClient } from '../../lib/sanity.server'
 import Head from 'next/head'
-import Link from 'next/link'
-import { sanityClient } from '../../lib/sanity'
 
-const POSTS_PER_PAGE = 15
+export async function getStaticPaths() {
+  const query = groq`*[_type == "category"]{ "slug": slug }`
+  const categories = await getClient().fetch(query)
 
-export async function getServerSideProps({ params, query }) {
+  const paths = categories.map((cat) => ({
+    params: { slug: cat.slug?.current || cat.slug }
+  }))
+
+  return {
+    paths,
+    fallback: false,
+  }
+}
+
+export async function getStaticProps({ params }) {
   const { slug } = params
-  const currentPage = parseInt(query.page || '1', 10)
-  const start = (currentPage - 1) * POSTS_PER_PAGE
 
-  const totalQuery = `count(*[_type == "post" && defined(publishedAt) && publishedAt < now() && category->slug.current == $slug])`
-  const postsQuery = `*[_type == "post" && defined(publishedAt) && publishedAt < now() && category->slug.current == $slug]
-    | order(publishedAt desc)
-    [${start}...${start + POSTS_PER_PAGE}] {
-      title,
-      slug,
-      publishedAt,
-      excerpt: coalesce(seoDescription, "")
-    }`
+  const categoryQuery = groq`
+    *[_type == "category" && slug.current == $slug][0]
+  `
+  const postsQuery = groq`
+    *[_type == "post" && references(*[_type == "category" && slug.current == $slug]._id)] | order(_createdAt desc) {
+      _id, title, slug, mainImage, publishedAt, body
+    }
+  `
 
-  const [totalPosts, posts] = await Promise.all([
-    sanityClient.fetch(totalQuery, { slug }),
-    sanityClient.fetch(postsQuery, { slug }),
-  ])
+  const category = await getClient().fetch(categoryQuery, { slug })
+  const posts = await getClient().fetch(postsQuery, { slug })
 
-  const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE)
+  if (!category) {
+    return { notFound: true }
+  }
 
   return {
     props: {
-      slug,
-      posts: posts || [],
-      currentPage,
-      totalPages,
+      category,
+      posts,
     },
   }
 }
 
-export default function CategoryPage({ slug, posts, currentPage, totalPages }) {
-  const capitalized = slug.replace(/-/g, ' ')
-
+export default function CategoryPage({ category, posts }) {
   return (
     <>
       <Head>
-        <title>{`${capitalized} | DIY HQ`}</title>
-        <meta name="description" content={`DIY HQ blog posts in ${capitalized} category`} />
+        <title>{category.title} – DIY HQ</title>
       </Head>
-
-      <main className="min-h-screen flex flex-col items-center justify-start px-4 py-16">
-        <div className="w-full max-w-5xl">
-          <h1 className="text-3xl font-bold text-center mb-10 capitalize">{capitalized}</h1>
-
-          {posts.length === 0 ? (
-            <p className="text-center text-gray-600">No posts found in this category.</p>
-          ) : (
-            <ul className="space-y-12">
-              {posts.map((post) => (
-                <li key={post.slug?.current || post.title} className="border-b pb-6">
-                  {post.slug?.current ? (
-                    <Link
-                      href={`/post/${post.slug.current}`}
-                      className="text-2xl text-blue-600 hover:underline block"
-                    >
-                      {post.title}
-                    </Link>
-                  ) : (
-                    <span className="text-2xl text-gray-500">{post.title}</span>
-                  )}
-                  <p className="text-sm text-gray-500 mt-1">
-                    {post.publishedAt
-                      ? new Date(post.publishedAt).toLocaleDateString()
-                      : 'Date unknown'}
-                  </p>
-                  {post.excerpt && (
-                    <p className="text-gray-700 mt-2">{post.excerpt}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/* Pagination Controls */}
-          <div className="flex justify-center gap-4 mt-12">
-            {currentPage > 1 && (
-              <Link
-                href={`/category/${slug}?page=${currentPage - 1}`}
-                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                ← Previous
-              </Link>
-            )}
-            {currentPage < totalPages && (
-              <Link
-                href={`/category/${slug}?page=${currentPage + 1}`}
-                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                Next →
-              </Link>
-            )}
-          </div>
-        </div>
+      <main>
+        <h1>{category.title}</h1>
+        {posts.length === 0 ? (
+          <p>No posts in this category yet.</p>
+        ) : (
+          <ul>
+            {posts.map((post) => (
+              <li key={post._id}>
+                <a href={`/post/${post.slug.current}`}>{post.title}</a>
+              </li>
+            ))}
+          </ul>
+        )}
       </main>
     </>
   )
