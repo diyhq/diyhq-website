@@ -47,7 +47,7 @@ export default function Post({ post }) {
             <h2 className="text-xl font-semibold">Step-by-Step Instructions</h2>
             <ol className="list-decimal list-inside mt-2 space-y-1">
               {post.stepByStepInstructions.map((step, idx) => (
-                <li key={step._key || idx}>{step.step}</li>
+                <li key={step._key || idx}>{step.text}</li>
               ))}
             </ol>
           </div>
