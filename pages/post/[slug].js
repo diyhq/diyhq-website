@@ -29,7 +29,7 @@ export default function Post({ post }) {
         )}
 
         <div className="text-sm text-gray-500 mb-2">
-          {new Date(post.publishedAt).toLocaleDateString()}
+          {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString() : ''}
         </div>
 
         <article className="prose">
@@ -73,7 +73,7 @@ export async function getStaticPaths() {
   const posts = await sanityClient.fetch(query);
 
   const paths = posts.map((post) => ({
-    params: { slug: post.slug }, // ✅ Returns plain string
+    params: { slug: String(post.slug) }, // ✅ Forces flat string
   }));
 
   return {
