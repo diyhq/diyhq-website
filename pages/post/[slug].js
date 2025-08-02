@@ -1,169 +1,189 @@
-// pages/post/[slug].js
-import { groq } from 'next-sanity';
-import { getClient } from '@/lib/sanity.client';
-import { PortableText } from '@portabletext/react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
+import { sanityClient, urlFor } from '../../lib/sanity'; // ✅ FIXED: relative import
+import { PortableText } from '@portabletext/react';
 
-export async function getStaticPaths() {
-  const query = groq`*[_type == "post" && defined(slug.current)][].slug.current`;
-  const slugs = await getClient().fetch(query);
-  return {
-    paths: slugs.map((slug) => ({ params: { slug } })),
-    fallback: true,
-  };
+export default function Post({ post }) {
+  const router = useRouter();
+
+  if (router.isFallback) return <p>Loading...</p>;
+  if (!post) return <p>Post not found.</p>;
+
+  return (
+    <>
+      <Head>
+        <title>{post.title} | DIY HQ</title>
+        <meta name="description" content={post.seoDescription || post.title} />
+      </Head>
+
+      <main className="max-w-3xl mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
+
+        {post.mainImage?.asset?._ref && (
+          <img
+            src={urlFor(post.mainImage).width(800).url()}
+            alt={post.imageAlt || post.title}
+            className="w-full rounded-lg mb-4"
+          />
+        )}
+
+        <div className="text-sm text-gray-500 mb-2">
+          {new Date(post.publishedAt).toLocaleDateString()}
+        </div>
+
+        {post.difficultyLevel && (
+          <p className="mb-2">
+            <strong>Difficulty:</strong> {post.difficultyLevel}
+          </p>
+        )}
+
+        {post.toolsNeeded?.length > 0 && (
+          <div className="mb-2">
+            <strong>Tools Needed:</strong>
+            <ul className="list-disc list-inside ml-4">
+              {post.toolsNeeded.map((tool, index) => (
+                <li key={index}>{tool}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {post.materialsNeeded?.length > 0 && (
+          <div className="mb-2">
+            <strong>Materials Needed:</strong>
+            <ul className="list-disc list-inside ml-4">
+              {post.materialsNeeded.map((mat, index) => (
+                <li key={index}>{mat}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {post.stepByStepInstructions?.length > 0 && (
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Step-by-Step Instructions</h2>
+            <ol className="list-decimal list-inside ml-4">
+              {post.stepByStepInstructions.map((step, index) => (
+                <li key={index}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {post.safetyTips?.length > 0 && (
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Safety Tips</h2>
+            <ul className="list-disc list-inside ml-4">
+              {post.safetyTips.map((tip, index) => (
+                <li key={index}>{tip}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {post.commonMistakes?.length > 0 && (
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Common Mistakes</h2>
+            <ul className="list-disc list-inside ml-4">
+              {post.commonMistakes.map((mistake, index) => (
+                <li key={index}>{mistake}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {post.projectTags?.length > 0 && (
+          <div className="mb-4">
+            <strong>Project Tags:</strong>{' '}
+            {post.projectTags.map((tag, index) => (
+              <span key={index} className="inline-block bg-gray-200 px-2 py-1 text-xs rounded mr-2">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {post.readTime && (
+          <p className="mb-2">
+            <strong>Estimated Read Time:</strong> {post.readTime} minutes
+          </p>
+        )}
+
+        {post.estimatedTime && (
+          <p className="mb-2">
+            <strong>Estimated Project Time:</strong> {post.estimatedTime}
+          </p>
+        )}
+
+        {post.estimatedCost && (
+          <p className="mb-2">
+            <strong>Estimated Cost:</strong> {post.estimatedCost}
+          </p>
+        )}
+
+        <article className="prose mt-6">
+          <PortableText value={post.body} />
+        </article>
+      </main>
+    </>
+  );
 }
 
 export async function getStaticProps({ params }) {
-  const query = groq`*[_type == "post" && slug.current == $slug][0]`;
-  const post = await getClient().fetch(query, { slug: params.slug });
-  return { props: { post }, revalidate: 60 };
-}
+  const slug = params?.slug;
 
-export default function PostPage({ post }) {
-  if (!post) return <div>Loading…</div>;
-
-  const {
+  const query = `*[_type == "post" && slug.current == $slug][0]{
+    _id,
     title,
+    slug,
+    body,
     mainImage,
     imageAlt,
     publishedAt,
-    body,
-    category,
+    category->{title},
+    authorAIName,
+    seoDescription,
     difficultyLevel,
     toolsNeeded,
     materialsNeeded,
     stepByStepInstructions,
     safetyTips,
     commonMistakes,
-    estimatedTime,
-    estimatedCost,
-    seoTitle,
-    seoDescription,
     projectTags,
-    authorAIName,
-    commentsEnabled,
-    updateLog,
     readTime,
-    featured,
-    videoURL,
-    faq,
-    affiliateLinks,
-    internalLink,
-    externalSourceURL,
-    isTestPost,
-    pinnedCategorySortOrder,
-    schemaTypeVersion,
-  } = post;
+    estimatedTime,
+    estimatedCost
+  }`;
 
-  return (
-    <article className="max-w-3xl mx-auto px-4 py-10">
-      <Head>
-        <title>{seoTitle || title}</title>
-        <meta name="description" content={seoDescription || ''} />
-      </Head>
+  const post = await sanityClient.fetch(query, { slug });
 
-      <h1 className="text-3xl font-bold mb-4">{title}</h1>
+  if (!post) {
+    return { notFound: true };
+  }
 
-      {mainImage?.asset?._ref && (
-        <img
-          src={mainImage.asset.url || `https://cdn.sanity.io/images/${process.env.NEXT_PUBLIC_SANITY_PROJECT_ID}/production/${mainImage.asset._ref.split('-')[1]}-${mainImage.asset._ref.split('-')[2]}.${mainImage.asset._ref.split('-')[3]}`}
-          alt={imageAlt || 'DIY HQ Blog Image'}
-          className="mb-6 rounded"
-        />
-      )}
+  return {
+    props: {
+      post,
+    },
+    revalidate: 60,
+  };
+}
 
-      <p className="text-sm text-gray-500 mb-4">{new Date(publishedAt).toLocaleDateString()}</p>
+export async function getStaticPaths() {
+  const query = `*[_type == "post" && defined(slug.current)][] {
+    "slug": slug.current
+  }`;
 
-      {difficultyLevel && <p><strong>Difficulty:</strong> {difficultyLevel}</p>}
-      {estimatedTime && <p><strong>Estimated Time:</strong> {estimatedTime}</p>}
-      {estimatedCost && <p><strong>Estimated Cost:</strong> {estimatedCost}</p>}
-      {readTime && <p><strong>Read Time:</strong> {readTime} mins</p>}
-      {authorAIName && <p><strong>Author:</strong> {authorAIName}</p>}
-      {videoURL && <p><strong>Video:</strong> <a href={videoURL} className="text-blue-600 underline">Watch</a></p>}
-      {externalSourceURL && <p><strong>Source:</strong> <a href={externalSourceURL} className="text-blue-600 underline">Visit</a></p>}
-      {internalLink && <p><strong>Related Internal Link:</strong> <a href={internalLink} className="text-blue-600 underline">Go</a></p>}
+  const posts = await sanityClient.fetch(query);
 
-      {toolsNeeded?.length > 0 && (
-        <div>
-          <h3 className="font-semibold mt-6">Tools Needed:</h3>
-          <ul className="list-disc list-inside">
-            {toolsNeeded.map((tool, idx) => <li key={idx}>{tool}</li>)}
-          </ul>
-        </div>
-      )}
+  const paths = posts
+    .filter(post => typeof post.slug === 'string')
+    .map(post => ({
+      params: { slug: post.slug },
+    }));
 
-      {materialsNeeded?.length > 0 && (
-        <div>
-          <h3 className="font-semibold mt-4">Materials Needed:</h3>
-          <ul className="list-disc list-inside">
-            {materialsNeeded.map((mat, idx) => <li key={idx}>{mat}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {stepByStepInstructions?.length > 0 && (
-        <div>
-          <h3 className="font-semibold mt-4">Steps:</h3>
-          <ol className="list-decimal list-inside">
-            {stepByStepInstructions.map((step, idx) => <li key={idx}>{step}</li>)}
-          </ol>
-        </div>
-      )}
-
-      {safetyTips?.length > 0 && (
-        <div>
-          <h3 className="font-semibold mt-4">Safety Tips:</h3>
-          <ul className="list-disc list-inside">
-            {safetyTips.map((tip, idx) => <li key={idx}>{tip}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {commonMistakes?.length > 0 && (
-        <div>
-          <h3 className="font-semibold mt-4">Common Mistakes:</h3>
-          <ul className="list-disc list-inside">
-            {commonMistakes.map((mistake, idx) => <li key={idx}>{mistake}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {faq?.length > 0 && (
-        <div>
-          <h3 className="font-semibold mt-4">FAQ:</h3>
-          <ul className="list-disc list-inside">
-            {faq.map((q, idx) => <li key={idx}>{q}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {affiliateLinks?.length > 0 && (
-        <div>
-          <h3 className="font-semibold mt-4">Affiliate Links:</h3>
-          <ul className="list-disc list-inside">
-            {affiliateLinks.map((link, idx) => <li key={idx}><a href={link} className="text-blue-600 underline">{link}</a></li>)}
-          </ul>
-        </div>
-      )}
-
-      {projectTags?.length > 0 && (
-        <p className="mt-4"><strong>Tags:</strong> {projectTags.join(', ')}</p>
-      )}
-
-      {updateLog?.length > 0 && (
-        <div className="mt-6 text-sm text-gray-600">
-          <strong>Update Log:</strong>
-          <ul className="list-disc list-inside">
-            {updateLog.map((log, idx) => <li key={idx}>{log}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {body && (
-        <div className="prose prose-blue mt-8">
-          <PortableText value={body} />
-        </div>
-      )}
-    </article>
-  );
+  return {
+    paths,
+    fallback: true,
+  };
 }
