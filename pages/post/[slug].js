@@ -1,9 +1,9 @@
 // pages/post/[slug].js
 
 import { groq } from 'next-sanity';
-import { getClient } from '@/lib/sanity.client';
+import { getClient } from '../../lib/sanity.client';
 import { PortableText } from '@portabletext/react';
-import { urlFor } from '@/lib/urlFor';
+import { urlFor } from '../../lib/urlFor';
 import Image from 'next/image';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -68,6 +68,46 @@ const Post = ({ post }) => {
             },
           }}
         />
+
+        {post.difficultyLevel && <p><strong>Difficulty:</strong> {post.difficultyLevel}</p>}
+        {post.estimatedTime && <p><strong>Time Required:</strong> {post.estimatedTime}</p>}
+        {post.estimatedCost && <p><strong>Estimated Cost:</strong> {post.estimatedCost}</p>}
+
+        {post.toolsNeeded?.length > 0 && (
+          <div>
+            <h2 className="font-bold mt-6">Tools Needed</h2>
+            <ul className="list-disc list-inside">
+              {post.toolsNeeded.map((tool, idx) => <li key={idx}>{tool}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {post.materialsNeeded?.length > 0 && (
+          <div>
+            <h2 className="font-bold mt-6">Materials Needed</h2>
+            <ul className="list-disc list-inside">
+              {post.materialsNeeded.map((mat, idx) => <li key={idx}>{mat}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {post.safetyTips?.length > 0 && (
+          <div>
+            <h2 className="font-bold mt-6">Safety Tips</h2>
+            <ul className="list-disc list-inside">
+              {post.safetyTips.map((tip, idx) => <li key={idx}>{tip}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {post.commonMistakes?.length > 0 && (
+          <div>
+            <h2 className="font-bold mt-6">Common Mistakes</h2>
+            <ul className="list-disc list-inside">
+              {post.commonMistakes.map((mistake, idx) => <li key={idx}>{mistake}</li>)}
+            </ul>
+          </div>
+        )}
       </div>
     </article>
   );
@@ -101,7 +141,14 @@ export async function getStaticProps({ params }) {
       },
       imageAlt,
       seoDescription,
-      excerpt
+      excerpt,
+      difficultyLevel,
+      estimatedTime,
+      estimatedCost,
+      toolsNeeded,
+      materialsNeeded,
+      safetyTips,
+      commonMistakes
     }
   `;
 
