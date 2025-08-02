@@ -1,5 +1,3 @@
-// pages/post/[slug].js
-
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { sanityClient } from '../../lib/sanity';
@@ -16,7 +14,7 @@ export default function Post({ post }) {
     <>
       <Head>
         <title>{post.title} | DIY HQ</title>
-        <meta name="description" content={post.seoDescription || post.excerpt || post.title} />
+        <meta name="description" content={post.seoDescription || post.title} />
       </Head>
 
       <main className="max-w-3xl mx-auto p-4">
@@ -34,46 +32,45 @@ export default function Post({ post }) {
           {new Date(post.publishedAt).toLocaleDateString()}
         </div>
 
-        <article className="prose max-w-none mb-8">
+        {post.authorAIName && (
+          <p className="text-sm italic text-gray-600 mb-4">
+            Written by {post.authorAIName}
+          </p>
+        )}
+
+        <article className="prose">
           <PortableText value={post.body} />
         </article>
 
-        {post.difficultyLevel && <p><strong>Difficulty:</strong> {post.difficultyLevel}</p>}
-        {post.estimatedTime && <p><strong>Time Required:</strong> {post.estimatedTime}</p>}
-        {post.estimatedCost && <p><strong>Estimated Cost:</strong> {post.estimatedCost}</p>}
-
-        {post.toolsNeeded?.length > 0 && (
-          <div className="mt-6">
-            <h2 className="font-bold">Tools Needed</h2>
-            <ul className="list-disc list-inside">
-              {post.toolsNeeded.map((tool, idx) => <li key={idx}>{tool}</li>)}
-            </ul>
-          </div>
-        )}
-
-        {post.materialsNeeded?.length > 0 && (
-          <div className="mt-6">
-            <h2 className="font-bold">Materials Needed</h2>
-            <ul className="list-disc list-inside">
-              {post.materialsNeeded.map((mat, idx) => <li key={idx}>{mat}</li>)}
-            </ul>
+        {post.stepByStepInstructions?.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold">Step-by-Step Instructions</h2>
+            <ol className="list-decimal list-inside mt-2 space-y-1">
+              {post.stepByStepInstructions.map((step, idx) => (
+                <li key={step._key || idx}>{step.step}</li>
+              ))}
+            </ol>
           </div>
         )}
 
         {post.safetyTips?.length > 0 && (
-          <div className="mt-6">
-            <h2 className="font-bold">Safety Tips</h2>
-            <ul className="list-disc list-inside">
-              {post.safetyTips.map((tip, idx) => <li key={idx}>{tip}</li>)}
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold">Safety Tips</h2>
+            <ul className="list-disc list-inside mt-2 space-y-1">
+              {post.safetyTips.map((tip, idx) => (
+                <li key={idx}>{tip}</li>
+              ))}
             </ul>
           </div>
         )}
 
         {post.commonMistakes?.length > 0 && (
-          <div className="mt-6">
-            <h2 className="font-bold">Common Mistakes</h2>
-            <ul className="list-disc list-inside">
-              {post.commonMistakes.map((mistake, idx) => <li key={idx}>{mistake}</li>)}
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold">Common Mistakes</h2>
+            <ul className="list-disc list-inside mt-2 space-y-1">
+              {post.commonMistakes.map((mistake, idx) => (
+                <li key={idx}>{mistake}</li>
+              ))}
             </ul>
           </div>
         )}
@@ -94,12 +91,7 @@ export async function getStaticProps({ params }) {
     category->{title},
     authorAIName,
     seoDescription,
-    excerpt,
-    estimatedCost,
-    estimatedTime,
-    difficultyLevel,
-    toolsNeeded,
-    materialsNeeded,
+    stepByStepInstructions,
     safetyTips,
     commonMistakes
   }`;
@@ -122,11 +114,9 @@ export async function getStaticPaths() {
   const query = `*[_type == "post" && defined(slug.current)][]{ "slug": slug.current }`;
   const posts = await sanityClient.fetch(query);
 
-  const paths = posts
-    .filter(post => typeof post.slug === 'string')
-    .map(post => ({
-      params: { slug: String(post.slug) }, // 🔒 force slug to string
-    }));
+  const paths = posts.map((post) => ({
+    params: { slug: String(post.slug) },
+  }));
 
   return {
     paths,
