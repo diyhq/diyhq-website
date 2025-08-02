@@ -1,165 +1,111 @@
-import { useRouter } from 'next/router';
-import Head from 'next/head';
-import { sanityClient, urlFor } from '../../lib/sanity'; // ✅ FIXED: relative import
-import { PortableText } from '@portabletext/react';
+// pages/post/[slug].js
 
-export default function Post({ post }) {
+import { groq } from 'next-sanity';
+import { getClient } from '@/lib/sanity.client';
+import { PortableText } from '@portabletext/react';
+import { urlFor } from '@/lib/urlFor';
+import Image from 'next/image';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
+
+const Post = ({ post }) => {
   const router = useRouter();
 
-  if (router.isFallback) return <p>Loading...</p>;
-  if (!post) return <p>Post not found.</p>;
+  if (router.isFallback) {
+    return <div>Loading…</div>;
+  }
+
+  if (!post) {
+    return <div>Post not found</div>;
+  }
 
   return (
-    <>
+    <article className="max-w-3xl mx-auto px-4 py-10">
       <Head>
-        <title>{post.title} | DIY HQ</title>
-        <meta name="description" content={post.seoDescription || post.title} />
+        <title>{post.title}</title>
+        <meta name="description" content={post.seoDescription || post.excerpt || ''} />
       </Head>
 
-      <main className="max-w-3xl mx-auto p-4">
-        <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
+      <h1 className="text-4xl font-bold mb-4">{post.title}</h1>
 
-        {post.mainImage?.asset?._ref && (
-          <img
-            src={urlFor(post.mainImage).width(800).url()}
+      {post.mainImage && post.mainImage.asset && (
+        <div className="mb-6">
+          <Image
+            src={urlFor(post.mainImage).url()}
             alt={post.imageAlt || post.title}
-            className="w-full rounded-lg mb-4"
+            width={768}
+            height={400}
+            className="rounded-lg object-cover"
           />
-        )}
-
-        <div className="text-sm text-gray-500 mb-2">
-          {new Date(post.publishedAt).toLocaleDateString()}
         </div>
+      )}
 
-        {post.difficultyLevel && (
-          <p className="mb-2">
-            <strong>Difficulty:</strong> {post.difficultyLevel}
-          </p>
-        )}
-
-        {post.toolsNeeded?.length > 0 && (
-          <div className="mb-2">
-            <strong>Tools Needed:</strong>
-            <ul className="list-disc list-inside ml-4">
-              {post.toolsNeeded.map((tool, index) => (
-                <li key={index}>{tool}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {post.materialsNeeded?.length > 0 && (
-          <div className="mb-2">
-            <strong>Materials Needed:</strong>
-            <ul className="list-disc list-inside ml-4">
-              {post.materialsNeeded.map((mat, index) => (
-                <li key={index}>{mat}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {post.stepByStepInstructions?.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold">Step-by-Step Instructions</h2>
-            <ol className="list-decimal list-inside ml-4">
-              {post.stepByStepInstructions.map((step, index) => (
-                <li key={index}>{step}</li>
-              ))}
-            </ol>
-          </div>
-        )}
-
-        {post.safetyTips?.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold">Safety Tips</h2>
-            <ul className="list-disc list-inside ml-4">
-              {post.safetyTips.map((tip, index) => (
-                <li key={index}>{tip}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {post.commonMistakes?.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold">Common Mistakes</h2>
-            <ul className="list-disc list-inside ml-4">
-              {post.commonMistakes.map((mistake, index) => (
-                <li key={index}>{mistake}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {post.projectTags?.length > 0 && (
-          <div className="mb-4">
-            <strong>Project Tags:</strong>{' '}
-            {post.projectTags.map((tag, index) => (
-              <span key={index} className="inline-block bg-gray-200 px-2 py-1 text-xs rounded mr-2">
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {post.readTime && (
-          <p className="mb-2">
-            <strong>Estimated Read Time:</strong> {post.readTime} minutes
-          </p>
-        )}
-
-        {post.estimatedTime && (
-          <p className="mb-2">
-            <strong>Estimated Project Time:</strong> {post.estimatedTime}
-          </p>
-        )}
-
-        {post.estimatedCost && (
-          <p className="mb-2">
-            <strong>Estimated Cost:</strong> {post.estimatedCost}
-          </p>
-        )}
-
-        <article className="prose mt-6">
-          <PortableText value={post.body} />
-        </article>
-      </main>
-    </>
+      <div className="text-gray-700 space-y-6">
+        <PortableText
+          value={post.body}
+          components={{
+            types: {
+              block: ({ children }) => <p>{children}</p>,
+              image: ({ value }) => (
+                value?.asset?._ref ? (
+                  <Image
+                    src={urlFor(value).url()}
+                    alt={value.alt || 'Blog image'}
+                    width={768}
+                    height={400}
+                    className="rounded-lg my-4"
+                  />
+                ) : null
+              ),
+              unknown: ({ value }) => (
+                <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 p-4 my-4 rounded">
+                  ⚠️ Unknown block type:
+                  <pre className="whitespace-pre-wrap text-xs overflow-x-auto">
+                    {JSON.stringify(value, null, 2)}
+                  </pre>
+                </div>
+              ),
+            },
+          }}
+        />
+      </div>
+    </article>
   );
+};
+
+export async function getStaticPaths() {
+  const query = groq`*[_type == "post"]{ slug }`;
+  const posts = await getClient().fetch(query);
+
+  const paths = posts
+    .filter((post) => post.slug?.current)
+    .map((post) => ({
+      params: { slug: post.slug.current },
+    }));
+
+  return {
+    paths,
+    fallback: true,
+  };
 }
 
 export async function getStaticProps({ params }) {
-  const slug = params?.slug;
+  const query = groq`
+    *[_type == "post" && slug.current == $slug][0]{
+      title,
+      slug,
+      body,
+      mainImage {
+        asset->,
+        alt
+      },
+      imageAlt,
+      seoDescription,
+      excerpt
+    }
+  `;
 
-  const query = `*[_type == "post" && slug.current == $slug][0]{
-    _id,
-    title,
-    slug,
-    body,
-    mainImage,
-    imageAlt,
-    publishedAt,
-    category->{title},
-    authorAIName,
-    seoDescription,
-    difficultyLevel,
-    toolsNeeded,
-    materialsNeeded,
-    stepByStepInstructions,
-    safetyTips,
-    commonMistakes,
-    projectTags,
-    readTime,
-    estimatedTime,
-    estimatedCost
-  }`;
-
-  const post = await sanityClient.fetch(query, { slug });
-
-  if (!post) {
-    return { notFound: true };
-  }
+  const post = await getClient().fetch(query, { slug: params.slug });
 
   return {
     props: {
@@ -169,21 +115,4 @@ export async function getStaticProps({ params }) {
   };
 }
 
-export async function getStaticPaths() {
-  const query = `*[_type == "post" && defined(slug.current)][] {
-    "slug": slug.current
-  }`;
-
-  const posts = await sanityClient.fetch(query);
-
-  const paths = posts
-    .filter(post => typeof post.slug === 'string')
-    .map(post => ({
-      params: { slug: post.slug },
-    }));
-
-  return {
-    paths,
-    fallback: true,
-  };
-}
+export default Post;
