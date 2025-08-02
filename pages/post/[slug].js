@@ -31,6 +31,35 @@ export default function Post({ post }) {
           {new Date(post.publishedAt).toLocaleDateString()}
         </div>
 
+        {/* Difficulty Level */}
+        {post.difficultyLevel && (
+          <p className="mb-2"><strong>Difficulty:</strong> {post.difficultyLevel}</p>
+        )}
+
+        {/* Tools Needed */}
+        {post.toolsNeeded?.length > 0 && (
+          <div className="mb-4">
+            <strong>Tools Needed:</strong>
+            <ul className="list-disc list-inside">
+              {post.toolsNeeded.map((tool, i) => (
+                <li key={i}>{tool}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Materials Needed */}
+        {post.materialsNeeded?.length > 0 && (
+          <div className="mb-4">
+            <strong>Materials Needed:</strong>
+            <ul className="list-disc list-inside">
+              {post.materialsNeeded.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <article className="prose">
           <PortableText value={post.body} />
         </article>
@@ -50,6 +79,9 @@ export async function getStaticProps({ params }) {
     mainImage,
     imageAlt,
     publishedAt,
+    difficultyLevel,
+    toolsNeeded,
+    materialsNeeded,
     category->{title},
     authorAIName,
     seoDescription
