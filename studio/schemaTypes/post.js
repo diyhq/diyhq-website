@@ -6,7 +6,14 @@ export default {
     { name: 'title', title: 'Title', type: 'string' },
     { name: 'slug', title: 'Slug', type: 'slug', options: { source: 'title', maxLength: 96 } },
     { name: 'body', title: 'Body', type: 'blockContent' },
-    { name: 'mainImage', title: 'Main Image', type: 'image' },
+    {
+      name: 'mainImage',
+      title: 'Main Image',
+      type: 'image',
+      options: {
+        hotspot: true,
+      },
+    },
     { name: 'imageAlt', title: 'Image Alt Text', type: 'string' },
     { name: 'publishedAt', title: 'Published At', type: 'datetime' },
     { name: 'category', title: 'Category', type: 'reference', to: { type: 'category' } },
