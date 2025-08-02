@@ -1,9 +1,9 @@
 // pages/post/[slug].js
 
 import { groq } from 'next-sanity';
-import { getClient } from '../../lib/sanity.client';
+import { getClient } from '@/lib/sanity.client';
 import { PortableText } from '@portabletext/react';
-import { urlFor } from '../../lib/urlFor';
+import { urlFor } from '@/lib/urlFor';
 import Image from 'next/image';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -11,13 +11,8 @@ import { useRouter } from 'next/router';
 const Post = ({ post }) => {
   const router = useRouter();
 
-  if (router.isFallback) {
-    return <div>Loading…</div>;
-  }
-
-  if (!post) {
-    return <div>Post not found</div>;
-  }
+  if (router.isFallback) return <div>Loading…</div>;
+  if (!post) return <div>Post not found</div>;
 
   return (
     <article className="max-w-3xl mx-auto px-4 py-10">
@@ -28,7 +23,7 @@ const Post = ({ post }) => {
 
       <h1 className="text-4xl font-bold mb-4">{post.title}</h1>
 
-      {post.mainImage && post.mainImage.asset && (
+      {post.mainImage?.asset && (
         <div className="mb-6">
           <Image
             src={urlFor(post.mainImage).url()}
@@ -46,7 +41,7 @@ const Post = ({ post }) => {
           components={{
             types: {
               block: ({ children }) => <p>{children}</p>,
-              image: ({ value }) => (
+              image: ({ value }) =>
                 value?.asset?._ref ? (
                   <Image
                     src={urlFor(value).url()}
@@ -55,8 +50,7 @@ const Post = ({ post }) => {
                     height={400}
                     className="rounded-lg my-4"
                   />
-                ) : null
-              ),
+                ) : null,
               unknown: ({ value }) => (
                 <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 p-4 my-4 rounded">
                   ⚠️ Unknown block type:
