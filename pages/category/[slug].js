@@ -21,7 +21,10 @@ export default function CategoryPage({ category, posts }) {
         ) : (
           <ul className="space-y-6">
             {posts.map((post) => (
-              <li key={post._id} className="flex items-start space-x-4">
+              <li
+                key={post._id}
+                className="flex items-start space-x-4 bg-white border rounded-md shadow-sm hover:shadow-md transition duration-200 p-2"
+              >
                 {post.mainImage?.asset?._ref && (
                   <img
                     src={urlFor(post.mainImage).width(120).height(80).url()}
@@ -35,6 +38,10 @@ export default function CategoryPage({ category, posts }) {
                       {post.title}
                     </a>
                   </Link>
+                  <div className="text-sm text-gray-500 mt-1">
+                    {post.estimatedTime && <p>⏱ {post.estimatedTime}</p>}
+                    {post.estimatedCost && <p>💰 {post.estimatedCost}</p>}
+                  </div>
                 </div>
               </li>
             ))}
@@ -49,16 +56,16 @@ export async function getStaticProps({ params }) {
   const categoryQuery = `*[_type == "category" && slug.current == $slug][0]`;
   const category = await sanityClient.fetch(categoryQuery, { slug: params.slug });
 
-  if (!category) {
-    return { notFound: true };
-  }
+  if (!category) return { notFound: true };
 
-  const postsQuery = `*[_type == "post" && category._ref == $categoryId]{
+  const postsQuery = `*[_type == "post" && category._ref == $categoryId] | order(publishedAt desc) {
     _id,
     title,
     slug,
     mainImage,
-    imageAlt
+    imageAlt,
+    estimatedTime,
+    estimatedCost
   }`;
 
   const posts = await sanityClient.fetch(postsQuery, { categoryId: category._id });
