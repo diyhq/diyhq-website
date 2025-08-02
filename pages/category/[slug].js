@@ -43,20 +43,19 @@ export default function CategoryPage({ category, posts }) {
 
 export async function getStaticProps({ params }) {
   const categoryQuery = `*[_type == "category" && slug.current == $slug][0]`;
-  const postsQuery = `*[_type == "post" && category->slug.current == $slug]{
+  const category = await sanityClient.fetch(categoryQuery, { slug: params.slug });
+
+  if (!category) {
+    return { notFound: true };
+  }
+
+  const postsQuery = `*[_type == "post" && category._ref == $categoryId]{
     _id,
     title,
     slug
   }`;
 
-  const category = await sanityClient.fetch(categoryQuery, { slug: params.slug });
-  const posts = await sanityClient.fetch(postsQuery, { slug: params.slug });
-
-  if (!category) {
-    return {
-      notFound: true,
-    };
-  }
+  const posts = await sanityClient.fetch(postsQuery, { categoryId: category._id });
 
   return {
     props: {
