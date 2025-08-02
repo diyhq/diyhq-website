@@ -1,75 +1,50 @@
-// pages/post/[slug].js
-
-import { groq } from 'next-sanity';
-import { getClient } from '@/lib/sanity.client';
-import { PortableText } from '@portabletext/react';
-import { urlFor } from '@/lib/urlFor';
-import Image from 'next/image';
-import Head from 'next/head';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
+import { sanityClient } from '../../lib/sanity';
+import { urlFor } from '../../lib/urlFor';
+import { PortableText } from '@portabletext/react';
 
-const Post = ({ post }) => {
+export default function Post({ post }) {
   const router = useRouter();
 
-  if (router.isFallback) return <div>Loading…</div>;
-  if (!post) return <div>Post not found</div>;
+  if (router.isFallback) return <p>Loading...</p>;
+  if (!post) return <p>Post not found.</p>;
 
   return (
-    <article className="max-w-3xl mx-auto px-4 py-10">
+    <>
       <Head>
-        <title>{post.title}</title>
-        <meta name="description" content={post.seoDescription || post.excerpt || ''} />
+        <title>{post.title} | DIY HQ</title>
+        <meta name="description" content={post.seoDescription || post.title} />
       </Head>
 
-      <h1 className="text-4xl font-bold mb-4">{post.title}</h1>
+      <main className="max-w-3xl mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
 
-      {post.mainImage?.asset && (
-        <div className="mb-6">
-          <Image
-            src={urlFor(post.mainImage).url()}
+        {post.mainImage?.asset?._ref && (
+          <img
+            src={urlFor(post.mainImage).width(800).url()}
             alt={post.imageAlt || post.title}
-            width={768}
-            height={400}
-            className="rounded-lg object-cover"
+            className="w-full rounded-lg mb-4"
           />
+        )}
+
+        <div className="text-sm text-gray-500 mb-2">
+          {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString() : ''}
         </div>
-      )}
 
-      <div className="text-gray-700 space-y-6">
-        <PortableText
-          value={post.body}
-          components={{
-            types: {
-              block: ({ children }) => <p>{children}</p>,
-              image: ({ value }) =>
-                value?.asset?._ref ? (
-                  <Image
-                    src={urlFor(value).url()}
-                    alt={value.alt || 'Blog image'}
-                    width={768}
-                    height={400}
-                    className="rounded-lg my-4"
-                  />
-                ) : null,
-              unknown: ({ value }) => (
-                <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 p-4 my-4 rounded">
-                  ⚠️ Unknown block type:
-                  <pre className="whitespace-pre-wrap text-xs overflow-x-auto">
-                    {JSON.stringify(value, null, 2)}
-                  </pre>
-                </div>
-              ),
-            },
-          }}
-        />
+        <article className="prose">
+          <PortableText value={post.body} />
+        </article>
 
-        {post.difficultyLevel && <p><strong>Difficulty:</strong> {post.difficultyLevel}</p>}
-        {post.estimatedTime && <p><strong>Time Required:</strong> {post.estimatedTime}</p>}
-        {post.estimatedCost && <p><strong>Estimated Cost:</strong> {post.estimatedCost}</p>}
+        <div className="mt-8 space-y-2 text-sm text-gray-700">
+          {post.difficultyLevel && <p><strong>Difficulty:</strong> {post.difficultyLevel}</p>}
+          {post.estimatedTime && <p><strong>Time Required:</strong> {post.estimatedTime}</p>}
+          {post.estimatedCost && <p><strong>Estimated Cost:</strong> {post.estimatedCost}</p>}
+        </div>
 
         {post.toolsNeeded?.length > 0 && (
-          <div>
-            <h2 className="font-bold mt-6">Tools Needed</h2>
+          <div className="mt-6">
+            <h2 className="font-semibold">Tools Needed</h2>
             <ul className="list-disc list-inside">
               {post.toolsNeeded.map((tool, idx) => <li key={idx}>{tool}</li>)}
             </ul>
@@ -77,8 +52,8 @@ const Post = ({ post }) => {
         )}
 
         {post.materialsNeeded?.length > 0 && (
-          <div>
-            <h2 className="font-bold mt-6">Materials Needed</h2>
+          <div className="mt-6">
+            <h2 className="font-semibold">Materials Needed</h2>
             <ul className="list-disc list-inside">
               {post.materialsNeeded.map((mat, idx) => <li key={idx}>{mat}</li>)}
             </ul>
@@ -86,8 +61,8 @@ const Post = ({ post }) => {
         )}
 
         {post.safetyTips?.length > 0 && (
-          <div>
-            <h2 className="font-bold mt-6">Safety Tips</h2>
+          <div className="mt-6">
+            <h2 className="font-semibold">Safety Tips</h2>
             <ul className="list-disc list-inside">
               {post.safetyTips.map((tip, idx) => <li key={idx}>{tip}</li>)}
             </ul>
@@ -95,58 +70,46 @@ const Post = ({ post }) => {
         )}
 
         {post.commonMistakes?.length > 0 && (
-          <div>
-            <h2 className="font-bold mt-6">Common Mistakes</h2>
+          <div className="mt-6">
+            <h2 className="font-semibold">Common Mistakes</h2>
             <ul className="list-disc list-inside">
-              {post.commonMistakes.map((mistake, idx) => <li key={idx}>{mistake}</li>)}
+              {post.commonMistakes.map((m, idx) => <li key={idx}>{m}</li>)}
             </ul>
           </div>
         )}
-      </div>
-    </article>
+      </main>
+    </>
   );
-};
-
-export async function getStaticPaths() {
-  const query = groq`*[_type == "post"]{ slug }`;
-  const posts = await getClient().fetch(query);
-
-  const paths = posts
-    .filter((post) => post.slug?.current)
-    .map((post) => ({
-      params: { slug: post.slug.current },
-    }));
-
-  return {
-    paths,
-    fallback: true,
-  };
 }
 
 export async function getStaticProps({ params }) {
-  const query = groq`
-    *[_type == "post" && slug.current == $slug][0]{
-      title,
-      slug,
-      body,
-      mainImage {
-        asset->,
-        alt
-      },
-      imageAlt,
-      seoDescription,
-      excerpt,
-      difficultyLevel,
-      estimatedTime,
-      estimatedCost,
-      toolsNeeded,
-      materialsNeeded,
-      safetyTips,
-      commonMistakes
-    }
-  `;
+  const slug = params?.slug;
 
-  const post = await getClient().fetch(query, { slug: params.slug });
+  const query = `*[_type == "post" && slug.current == $slug][0]{
+    _id,
+    title,
+    slug,
+    body,
+    mainImage,
+    imageAlt,
+    publishedAt,
+    authorAIName,
+    seoDescription,
+    excerpt,
+    difficultyLevel,
+    estimatedTime,
+    estimatedCost,
+    toolsNeeded,
+    materialsNeeded,
+    safetyTips,
+    commonMistakes
+  }`;
+
+  const post = await sanityClient.fetch(query, { slug });
+
+  if (!post) {
+    return { notFound: true };
+  }
 
   return {
     props: {
@@ -156,4 +119,19 @@ export async function getStaticProps({ params }) {
   };
 }
 
-export default Post;
+export async function getStaticPaths() {
+  const query = `*[_type == "post" && defined(slug.current)][]{
+    "slug": slug.current
+  }`;
+
+  const posts = await sanityClient.fetch(query);
+
+  const paths = posts.map(post => ({
+    params: { slug: post.slug },
+  }));
+
+  return {
+    paths,
+    fallback: true,
+  };
+}
