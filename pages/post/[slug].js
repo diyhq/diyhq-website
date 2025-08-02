@@ -111,15 +111,12 @@ export async function getStaticProps({ params }) {
 }
 
 export async function getStaticPaths() {
-  const query = `*[_type == "post" && defined(slug.current)][]{ "slug": slug.current }`;
-  const posts = await sanityClient.fetch(query);
-
-  const paths = posts.map((post) => ({
-    params: { slug: String(post.slug) },
-  }));
-
   return {
-    paths,
+    paths: [
+      {
+        params: { slug: 'this-is-a-blog-test-for-home-repair' },
+      },
+    ],
     fallback: true,
   };
 }
