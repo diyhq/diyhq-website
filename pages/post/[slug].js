@@ -18,14 +18,13 @@ export default function Post({ post }) {
     mainImage,
     imageAlt,
     authorAIName,
-    body,
+    body = [],
     stepByStepInstructions = [],
     safetyTips = [],
     commonMistakes = [],
   } = post;
 
-  const mainUrl =
-    mainImage ? urlFor(mainImage).width(1200).fit('max').url() : null;
+  const mainUrl = mainImage ? urlFor(mainImage).width(1200).fit('max').url() : null;
 
   return (
     <>
@@ -43,6 +42,7 @@ export default function Post({ post }) {
             src={mainUrl}
             alt={imageAlt || title}
             className="w-full rounded-lg mb-4"
+            loading="eager"
           />
         )}
 
@@ -51,17 +51,17 @@ export default function Post({ post }) {
         </div>
 
         {authorAIName && (
-          <p className="text-sm italic text-gray-600 mb-4">
+          <p className="text-sm italic text-gray-600 mb-6">
             Written by {authorAIName}
           </p>
         )}
 
-        {/* Portable Text (Sanity’s rich content) */}
+        {/* Portable Text (Sanity rich content) */}
         <article className="prose max-w-none">
           <PortableText value={body} components={ptComponents} />
         </article>
 
-        {/* Arrays in your schema are arrays of strings — render them as such */}
+        {/* Arrays (strings) */}
         {stepByStepInstructions.length > 0 && (
           <section className="mt-10">
             <h2 className="text-xl font-semibold">Step‑by‑Step Instructions</h2>
@@ -111,7 +111,7 @@ export async function getStaticProps({ params }) {
     seoDescription,
     // Portable Text body
     body,
-    // Arrays of strings
+    // Arrays of strings (match your schema)
     stepByStepInstructions,
     safetyTips,
     commonMistakes
@@ -123,18 +123,19 @@ export async function getStaticProps({ params }) {
 
   return {
     props: { post },
-    revalidate: 60, // ISR
+    // Incremental Static Regeneration – rebuild this page in the background
+    revalidate: 60
   };
 }
 
 export async function getStaticPaths() {
-  // Prebuild any existing slugs; fallback handles the rest on first request
+  // Prebuild all known slugs so drafts go live immediately on first hit
   const slugs = await sanityClient.fetch(
     `*[_type == "post" && defined(slug.current)][].slug.current`
   );
 
   return {
     paths: slugs.map((slug) => ({ params: { slug } })),
-    fallback: 'blocking', // render on-demand, then cache
+    fallback: 'blocking'
   };
 }
