@@ -7,7 +7,6 @@ import ptComponents from '../../components/ptComponents';
 
 export default function Post({ post }) {
   const router = useRouter();
-
   if (router.isFallback) return <p>Loading…</p>;
   if (!post) return <p>Post not found.</p>;
 
@@ -18,11 +17,23 @@ export default function Post({ post }) {
     mainImage,
     imageAlt,
     authorAIName,
-    body = [],
-    stepByStepInstructions = [],
-    safetyTips = [],
-    commonMistakes = [],
+    body,
+    pst, // legacy field from earlier bad patch (may or may not exist)
+    stepByStepInstructions,
+    safetyTips,
+    commonMistakes,
   } = post;
+
+  // ---- Normalizers (avoid `.length` on null) ----
+  const portableBody = Array.isArray(body)
+    ? body
+    : Array.isArray(pst?.body)     // fallback for older docs that stored content under `pst.body`
+    ? pst.body
+    : [];
+
+  const steps = Array.isArray(stepByStepInstructions) ? stepByStepInstructions : [];
+  const safety = Array.isArray(safetyTips) ? safetyTips : [];
+  const mistakes = Array.isArray(commonMistakes) ? commonMistakes : [];
 
   const mainUrl = mainImage ? urlFor(mainImage).width(1200).fit('max').url() : null;
 
@@ -42,7 +53,6 @@ export default function Post({ post }) {
             src={mainUrl}
             alt={imageAlt || title}
             className="w-full rounded-lg mb-4"
-            loading="eager"
           />
         )}
 
@@ -51,44 +61,44 @@ export default function Post({ post }) {
         </div>
 
         {authorAIName && (
-          <p className="text-sm italic text-gray-600 mb-6">
+          <p className="text-sm italic text-gray-600 mb-4">
             Written by {authorAIName}
           </p>
         )}
 
         {/* Portable Text (Sanity rich content) */}
         <article className="prose max-w-none">
-          <PortableText value={body} components={ptComponents} />
+          <PortableText value={portableBody} components={ptComponents} />
         </article>
 
-        {/* Arrays (strings) */}
-        {stepByStepInstructions.length > 0 && (
+        {/* Arrays are strings in your schema – render as lists */}
+        {steps.length > 0 && (
           <section className="mt-10">
             <h2 className="text-xl font-semibold">Step‑by‑Step Instructions</h2>
             <ol className="list-decimal list-inside mt-2 space-y-1">
-              {stepByStepInstructions.map((step, idx) => (
+              {steps.map((step, idx) => (
                 <li key={idx}>{step}</li>
               ))}
             </ol>
           </section>
         )}
 
-        {safetyTips.length > 0 && (
+        {safety.length > 0 && (
           <section className="mt-10">
             <h2 className="text-xl font-semibold">Safety Tips</h2>
             <ul className="list-disc list-inside mt-2 space-y-1">
-              {safetyTips.map((tip, idx) => (
+              {safety.map((tip, idx) => (
                 <li key={idx}>{tip}</li>
               ))}
             </ul>
           </section>
         )}
 
-        {commonMistakes.length > 0 && (
+        {mistakes.length > 0 && (
           <section className="mt-10">
             <h2 className="text-xl font-semibold">Common Mistakes</h2>
             <ul className="list-disc list-inside mt-2 space-y-1">
-              {commonMistakes.map((m, idx) => (
+              {mistakes.map((m, idx) => (
                 <li key={idx}>{m}</li>
               ))}
             </ul>
@@ -109,9 +119,11 @@ export async function getStaticProps({ params }) {
     imageAlt,
     authorAIName,
     seoDescription,
-    // Portable Text body
+    // Rich content
     body,
-    // Arrays of strings (match your schema)
+    // Include legacy 'pst' so we can fall back to pst.body if needed
+    pst,
+    // Arrays of strings
     stepByStepInstructions,
     safetyTips,
     commonMistakes
@@ -123,19 +135,17 @@ export async function getStaticProps({ params }) {
 
   return {
     props: { post },
-    // Incremental Static Regeneration – rebuild this page in the background
-    revalidate: 60
+    revalidate: 60, // ISR
   };
 }
 
 export async function getStaticPaths() {
-  // Prebuild all known slugs so drafts go live immediately on first hit
+  // Prebuild current slugs; others are rendered on first hit
   const slugs = await sanityClient.fetch(
     `*[_type == "post" && defined(slug.current)][].slug.current`
   );
-
   return {
     paths: slugs.map((slug) => ({ params: { slug } })),
-    fallback: 'blocking'
+    fallback: 'blocking',
   };
 }
