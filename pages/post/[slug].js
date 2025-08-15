@@ -5,6 +5,10 @@ import { PortableText } from '@portabletext/react';
 import { sanityClient } from '../../lib/sanity';
 import { urlFor } from '../../lib/urlFor';
 import ptComponents from '../../components/ptComponents';
+import SocialShareBar from '../../components/SocialShareBar';
+
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://www.doityourselfhq.com';
 
 export default function Post({ post }) {
   const router = useRouter();
@@ -18,17 +22,30 @@ export default function Post({ post }) {
     mainImage,
     imageAlt,
     authorAIName,
-    // these are already coalesced in the query, but we still guard here
+    estimatedTime,
+    estimatedCost,
+    difficultyLevel,
+    // coalesced in the query
     body = [],
     stepByStepInstructions = [],
     safetyTips = [],
     commonMistakes = [],
+    slug,
   } = post;
 
   const asArray = (v) => (Array.isArray(v) ? v : []);
   const bodyBlocks = Array.isArray(body) ? body : [];
 
-  const mainUrl = mainImage ? urlFor(mainImage).width(1200).fit('max').url() : null;
+  const mainUrl = mainImage ? urlFor(mainImage).width(1200).fit('max').url() : '';
+  const shareUrl = `${SITE_URL}/post/${slug?.current ?? ''}`;
+
+  // Build the tiny metadata row under the image
+  const metaBits = [
+    imageAlt && `Image: ${imageAlt}`,
+    estimatedTime && `Build time: ${estimatedTime}`,
+    difficultyLevel && `Skill: ${difficultyLevel}`,
+    estimatedCost && `Cost: ${estimatedCost}`,
+  ].filter(Boolean);
 
   return (
     <>
@@ -36,29 +53,55 @@ export default function Post({ post }) {
         <title>{title} | DIY HQ</title>
         <meta name="description" content={seoDescription || title} />
         {mainUrl && <meta property="og:image" content={mainUrl} />}
+        <meta property="og:title" content={title} />
+        {shareUrl && <meta property="og:url" content={shareUrl} />}
+        {seoDescription && <meta property="og:description" content={seoDescription} />}
       </Head>
 
       <main className="max-w-3xl mx-auto p-4">
+        {/* Title */}
         <h1 className="text-3xl font-bold mb-4">{title}</h1>
 
+        {/* Featured image */}
         {mainUrl && (
           <img
             src={mainUrl}
             alt={imageAlt || title}
-            className="w-full rounded-lg mb-4"
+            className="w-full rounded-lg"
             loading="lazy"
           />
         )}
 
-        <div className="text-sm text-gray-500 mb-2">
+        {/* Small meta line under the photo */}
+        {metaBits.length > 0 && (
+          <div className="text-xs text-gray-500 mt-2">
+            {metaBits.map((bit, i) => (
+              <span key={i}>
+                {i > 0 && <span className="mx-1">·</span>}
+                {bit}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Date + Author (kept as-is) */}
+        <div className="text-sm text-gray-500 mt-2">
           {publishedAt ? new Date(publishedAt).toLocaleDateString() : null}
+          {authorAIName && (
+            <>
+              {' '}
+              <span className="mx-1">·</span> Written by {authorAIName}
+            </>
+          )}
         </div>
 
-        {authorAIName && (
-          <p className="text-sm italic text-gray-600 mb-4">
-            Written by {authorAIName}
-          </p>
-        )}
+        {/* Share bar directly under the image/meta, above the article body */}
+        <SocialShareBar
+          url={shareUrl}
+          title={title}
+          description={seoDescription || ''}
+          image={mainUrl}
+        />
 
         {/* Portable Text (rich content) */}
         <article className="prose max-w-none">
@@ -113,6 +156,12 @@ export async function getStaticProps({ params }) {
     imageAlt,
     authorAIName,
     seoDescription,
+
+    // Prefer top-level fields; fall back to meta.* if that's how older posts saved them
+    "estimatedTime":  coalesce(estimatedTime,  meta.estimatedTime),
+    "estimatedCost":  coalesce(estimatedCost,  meta.estimatedCost),
+    "difficultyLevel": coalesce(difficultyLevel, meta.difficultyLevel),
+
     // Make sure null becomes [] so build never crashes
     "body": coalesce(body, []),
     "stepByStepInstructions": coalesce(stepByStepInstructions, []),
@@ -130,7 +179,6 @@ export async function getStaticProps({ params }) {
 }
 
 export async function getStaticPaths() {
-  // prebuild the slugs we know; others build on first request
   const slugs = await sanityClient.fetch(
     `*[_type == "post" && defined(slug.current)][].slug.current`
   );
