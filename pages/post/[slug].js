@@ -7,10 +7,7 @@ import { urlFor } from '../../lib/urlFor';
 import ptComponents from '../../components/ptComponents';
 import SocialShareBar from '../../components/SocialShareBar';
 
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || 'https://www.doityourselfhq.com';
-
-export default function Post({ post }) {
+export default function Post({ post, siteUrl }) {
   const router = useRouter();
   if (router.isFallback) return <p>Loading…</p>;
   if (!post) return <p>Post not found.</p>;
@@ -22,10 +19,11 @@ export default function Post({ post }) {
     mainImage,
     imageAlt,
     authorAIName,
+    // meta bits (optional in schema; guarded below)
+    difficultyLevel,
     estimatedTime,
     estimatedCost,
-    difficultyLevel,
-    // coalesced in the query
+    // arrays (already coalesced in the query)
     body = [],
     stepByStepInstructions = [],
     safetyTips = [],
@@ -36,16 +34,21 @@ export default function Post({ post }) {
   const asArray = (v) => (Array.isArray(v) ? v : []);
   const bodyBlocks = Array.isArray(body) ? body : [];
 
-  const mainUrl = mainImage ? urlFor(mainImage).width(1200).fit('max').url() : '';
-  const shareUrl = `${SITE_URL}/post/${slug?.current ?? ''}`;
+  const mainUrl = mainImage ? urlFor(mainImage).width(1200).fit('max').url() : null;
 
-  // Build the tiny metadata row under the image
-  const metaBits = [
-    imageAlt && `Image: ${imageAlt}`,
-    estimatedTime && `Build time: ${estimatedTime}`,
-    difficultyLevel && `Skill: ${difficultyLevel}`,
-    estimatedCost && `Cost: ${estimatedCost}`,
-  ].filter(Boolean);
+  // Site URL from env, with safe fallback
+  const base =
+    siteUrl ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://www.doityourselfhq.com';
+  const shareUrl = `${base}/post/${slug?.current || ''}`;
+
+  // Build the tiny meta row
+  const metaParts = []
+    .concat(imageAlt ? [`Alt: ${imageAlt}`] : [])
+    .concat(difficultyLevel ? [`Skill: ${difficultyLevel}`] : [])
+    .concat(estimatedTime ? [`Time: ${estimatedTime}`] : [])
+    .concat(estimatedCost ? [`Cost: ${estimatedCost}`] : []);
 
   return (
     <>
@@ -54,54 +57,40 @@ export default function Post({ post }) {
         <meta name="description" content={seoDescription || title} />
         {mainUrl && <meta property="og:image" content={mainUrl} />}
         <meta property="og:title" content={title} />
-        {shareUrl && <meta property="og:url" content={shareUrl} />}
-        {seoDescription && <meta property="og:description" content={seoDescription} />}
+        <meta property="og:url" content={shareUrl} />
       </Head>
 
       <main className="max-w-3xl mx-auto p-4">
-        {/* Title */}
         <h1 className="text-3xl font-bold mb-4">{title}</h1>
 
-        {/* Featured image */}
         {mainUrl && (
           <img
             src={mainUrl}
             alt={imageAlt || title}
-            className="w-full rounded-lg"
+            className="w-full rounded-lg mb-2"
             loading="lazy"
           />
         )}
 
-        {/* Small meta line under the photo */}
-        {metaBits.length > 0 && (
-          <div className="text-xs text-gray-500 mt-2">
-            {metaBits.map((bit, i) => (
-              <span key={i}>
-                {i > 0 && <span className="mx-1">·</span>}
-                {bit}
-              </span>
-            ))}
+        {/* tiny meta row, just under the photo */}
+        {metaParts.length > 0 && (
+          <div className="text-xs text-gray-500 mb-2">
+            {metaParts.join(' • ')}
           </div>
         )}
 
-        {/* Date + Author (kept as-is) */}
-        <div className="text-sm text-gray-500 mt-2">
+        {/* share bar, under the photo/meta */}
+        <SocialShareBar url={shareUrl} title={title} media={mainUrl} />
+
+        <div className="text-sm text-gray-500 mb-2">
           {publishedAt ? new Date(publishedAt).toLocaleDateString() : null}
-          {authorAIName && (
-            <>
-              {' '}
-              <span className="mx-1">·</span> Written by {authorAIName}
-            </>
-          )}
         </div>
 
-        {/* Share bar directly under the image/meta, above the article body */}
-        <SocialShareBar
-          url={shareUrl}
-          title={title}
-          description={seoDescription || ''}
-          image={mainUrl}
-        />
+        {authorAIName && (
+          <p className="text-sm italic text-gray-600 mb-4">
+            Written by {authorAIName}
+          </p>
+        )}
 
         {/* Portable Text (rich content) */}
         <article className="prose max-w-none">
@@ -156,13 +145,9 @@ export async function getStaticProps({ params }) {
     imageAlt,
     authorAIName,
     seoDescription,
-
-    // Prefer top-level fields; fall back to meta.* if that's how older posts saved them
-    "estimatedTime":  coalesce(estimatedTime,  meta.estimatedTime),
-    "estimatedCost":  coalesce(estimatedCost,  meta.estimatedCost),
-    "difficultyLevel": coalesce(difficultyLevel, meta.difficultyLevel),
-
-    // Make sure null becomes [] so build never crashes
+    difficultyLevel,
+    estimatedTime,
+    estimatedCost,
     "body": coalesce(body, []),
     "stepByStepInstructions": coalesce(stepByStepInstructions, []),
     "safetyTips": coalesce(safetyTips, []),
@@ -173,8 +158,11 @@ export async function getStaticProps({ params }) {
   if (!post) return { notFound: true };
 
   return {
-    props: { post },
-    revalidate: 60, // ISR
+    props: {
+      post,
+      siteUrl: process.env.NEXT_PUBLIC_SITE_URL || null,
+    },
+    revalidate: 60,
   };
 }
 
@@ -182,7 +170,6 @@ export async function getStaticPaths() {
   const slugs = await sanityClient.fetch(
     `*[_type == "post" && defined(slug.current)][].slug.current`
   );
-
   return {
     paths: slugs.map((slug) => ({ params: { slug } })),
     fallback: 'blocking',
