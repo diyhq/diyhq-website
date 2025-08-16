@@ -8,6 +8,13 @@ function MyApp({ Component, pageProps }) {
   return (
     <>
       <Head>
+        {/* Google AdSense – place exactly once site‑wide */}
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9161898764253346"
+          crossOrigin="anonymous"
+        ></script>
+
         {/* Essential Meta Tags */}
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
