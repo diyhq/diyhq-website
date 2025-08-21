@@ -52,7 +52,9 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
           >
             ← Previous
           </PageLink>
-          <span className="text-sm text-gray-600">Page {page} of {pageCount}</span>
+          <span className="text-sm text-gray-600">
+            Page {page} of {pageCount}
+          </span>
           <PageLink
             disabled={page >= pageCount}
             href={`/category/${slug}?page=${page + 1}`}
@@ -84,37 +86,40 @@ export async function getServerSideProps({ params, query }) {
   const slug = params.slug;
   const page = Math.max(1, parseInt(query.page ?? "1", 10));
 
-  // Posts in this category (works whether category is a reference or a plain string).
-  // Excludes drafts and posts with hidden == true.
+  // A tolerant alternate: historical “Automotive DIY” slugifies to "automotive-diy"
+  // Your route is "/category/automotive", so we match either.
+  const altSlug = slug.endsWith("-diy") ? slug.replace(/-diy$/, "") : `${slug}-diy`;
+
+  // GROQ:
+  // - match reference categories by their slug
+  // - OR match plain-text categories by slugifying them on the fly
+  // - exclude drafts, hidden, and future-dated
   const GROQ = `
     *[
-      _type == "post"
-      && defined(slug.current)
-      && !(_id in path("drafts.**"))
-      && (
-        (defined(category->slug.current) && category->slug.current == $slug)
-        || (defined(category) && lower(category) == $slug)
+      _type == "post" &&
+      defined(slug.current) &&
+      publishedAt < now() &&
+      !(_id in path("drafts.**")) &&
+      (!defined(hidden) || hidden == false) &&
+      (
+        (defined(category->slug.current) && category->slug.current in [$slug, $alt]) ||
+        lower(replace(coalesce(category, ""), "[^a-zA-Z0-9]+", "-")) in [$slug, $alt]
       )
-      && (!defined(hidden) || hidden == false)
     ] | order(publishedAt desc){
       title,
       "slug": slug.current,
       excerpt,
       mainImage,
       "categoryTitle": coalesce(category->title, category),
+      "catSlug": coalesce(category->slug.current, lower(replace(coalesce(category, ""), "[^a-zA-Z0-9]+", "-"))),
       publishedAt
     }
   `;
 
-  try {
-    const all = (await sanityFetch(GROQ, { slug })) ?? [];
-    const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
-    const start = (page - 1) * PER_PAGE;
-    const posts = all.slice(start, start + PER_PAGE);
+  const all = (await sanityFetch(GROQ, { slug, alt: altSlug })) ?? [];
+  const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
+  const start = (page - 1) * PER_PAGE;
+  const posts = all.slice(start, start + PER_PAGE);
 
-    return { props: { slug, page, pageCount, posts } };
-  } catch (err) {
-    console.error("Category page GROQ failed:", err);
-    return { props: { slug, page, pageCount: 1, posts: [] } };
-  }
+  return { props: { slug, page, pageCount, posts } };
 }
