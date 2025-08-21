@@ -4,7 +4,36 @@ import Image from "next/image";
 import { sanityFetch } from "../../lib/sanityFetch";
 import { urlFor } from "../../lib/sanity";
 
-const PER_PAGE = 12;
+const PER_PAGE = 15;
+
+/** Aliases so your route slugs match category-doc slugs/titles in Sanity */
+const ALIASES = {
+  "automotive": ["automotive-diy"],
+  "home-repair": ["home-repair-maintenance", "home-repair-and-maintenance"],
+  "tools-gear": ["tools-gear-reviews"],
+  "renovation": ["renovation-remodeling", "renovation-and-remodeling"],
+  "yard-garden": ["yard-garden-outdoor-diy"],
+  "smart-home": ["smart-home-ai-diy"],
+  "beginner-guides": ["beginner-diy-guides"],
+  "cleaning": ["diy-cleaning-maintenance", "cleaning-maintenance"],
+  "organization": ["home-organization"],
+  "side-hustles": ["diy-business-side-hustles", "business-side-hustles"],
+};
+
+function slugSetFor(slug) {
+  const set = new Set([slug, `${slug}-diy`, `diy-${slug}`]);
+  (ALIASES[slug] || []).forEach((s) => set.add(s));
+  return Array.from(set);
+}
+function titleSetFor(slug) {
+  const base = slug.replace(/-/g, ' ');
+  const set = new Set([base, `${base} diy`, `diy ${base}`]);
+  (ALIASES[slug] || []).forEach((s) => {
+    const t = s.replace(/-/g, ' ');
+    set.add(t); set.add(`${t} diy`); set.add(`diy ${t}`);
+  });
+  return Array.from(set);
+}
 
 export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
@@ -43,7 +72,6 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         ))}
       </ul>
 
-      {/* simple prev/next */}
       {pageCount > 1 && (
         <nav className="flex items-center justify-between mt-8">
           <PageLink
@@ -52,9 +80,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
           >
             ← Previous
           </PageLink>
-          <span className="text-sm text-gray-600">
-            Page {page} of {pageCount}
-          </span>
+          <span className="text-sm text-gray-600">Page {page} of {pageCount}</span>
           <PageLink
             disabled={page >= pageCount}
             href={`/category/${slug}?page=${page + 1}`}
@@ -83,37 +109,35 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = params.slug;
+  const slug = String(params.slug || "").toLowerCase();
   const page = Math.max(1, parseInt(query.page ?? "1", 10));
+  const slugs = slugSetFor(slug);
+  const titles = titleSetFor(slug);
 
-  // Find the category _id for references, then fetch posts that match EITHER:
-  //  - reference to that category, OR
-  //  - old string category whose kebab-cased value equals the slug
+  // Match posts by: single ref -> slug, array ref -> any slug, legacy string -> title-ish
   const GROQ = `
-  {
-    "catId": *[_type == "category" && slug.current == $slug][0]._id,
-    "items": *[
+    *[
       _type == "post" &&
       defined(slug.current) &&
-      !(_id in path("drafts.**")) &&
       publishedAt < now() &&
+      !(_id in path('drafts.**')) &&
+      (!defined(hidden) || hidden != true) &&
       (
-        (defined(^.catId) && references(^.catId)) ||
-        lower(replace(string(category), " ", "-")) == $slug
+        (defined(category->slug.current) && category->slug.current in $slugs) ||
+        (defined(categories) && count(categories[]->slug.current[@ in $slugs]) > 0) ||
+        (defined(category) && lower(category) in $titles)
       )
     ] | order(publishedAt desc){
       title,
       "slug": slug.current,
       excerpt,
       mainImage,
-      "categoryTitle": coalesce(category->title, string(category)),
+      "categoryTitle": coalesce(category->title, category),
       publishedAt
     }
-  }`;
+  `;
 
-  const data = await sanityFetch(GROQ, { slug });
-  const all = data?.items ?? [];
-
+  const all = (await sanityFetch(GROQ, { slugs, titles })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
