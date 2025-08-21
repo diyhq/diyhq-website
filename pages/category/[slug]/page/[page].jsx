@@ -21,7 +21,7 @@ export default function CategoryPageN(props) {
 }
 
 export async function getStaticPaths() {
-  // We won’t prebuild all pages; we’ll let ISR build on first hit
+  // Build page N on first request (ISR)
   return { paths: [], fallback: "blocking" };
 }
 
@@ -33,7 +33,6 @@ export async function getStaticProps({ params }) {
   const total = await sanityFetch(totalQuery, { slug });
 
   const pageCount = Math.max(1, Math.ceil((total || 0) / PAGE_SIZE));
-  // Redirect if page out of range
   if (page > pageCount) {
     return {
       redirect: { destination: `/category/${slug}/page/${pageCount}`, permanent: false },
@@ -44,15 +43,15 @@ export async function getStaticProps({ params }) {
   const to   = from + PAGE_SIZE;
 
   const listQuery = `* [${FILTER}] | order(publishedAt desc, _updatedAt desc) [${from}...${to}] ${fields}`;
-  const posts = await sanityFetch(listQuery, { slug }) || [];
+  const posts = (await sanityFetch(listQuery, { slug })) || [];
 
-  const catTitleRef   = `*[_type=="category" && slug.current==$slug][0]{title}`;
+  const catTitleRef = `*[_type=="category" && slug.current==$slug][0]{title}`;
   const categoryTitle = USE_CATEGORY_REFERENCE
     ? (await sanityFetch(catTitleRef, { slug }))?.title || slug
     : slug;
 
   const featuredQuery = `* [${FILTER} && featured==true] | order(publishedAt desc)[0...10] ${fields}`;
-  const featured = await sanityFetch(featuredQuery, { slug }) || [];
+  const featured = (await sanityFetch(featuredQuery, { slug })) || [];
 
   return {
     props: {
