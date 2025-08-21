@@ -1,25 +1,26 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import SearchBox from "./SearchBox";
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
 
   const categories = [
-    { title: "Home Repair", path: "/category/home-repair" },
-    { title: "Tools & Gear", path: "/category/tools-gear" },
-    { title: "Renovation", path: "/category/renovation" },
-    { title: "Yard & Garden", path: "/category/yard-garden" },
-    { title: "Smart Home", path: "/category/smart-home" },
-    { title: "Beginner Guides", path: "/category/beginner-guides" },
-    { title: "Automotive", path: "/category/automotive" },
-    { title: "Cleaning", path: "/category/cleaning" },
-    { title: "Organization", path: "/category/organization" },
-    { title: "Side Hustles", path: "/category/side-hustles" },
+    { title: "Home Repair",      path: "/category/home-repair" },
+    { title: "Tools & Gear",     path: "/category/tools-gear" },
+    { title: "Renovation",       path: "/category/renovation" },
+    { title: "Yard & Garden",    path: "/category/yard-garden" },
+    { title: "Smart Home",       path: "/category/smart-home" },
+    { title: "Beginner Guides",  path: "/category/beginner-guides" },
+    { title: "Automotive",       path: "/category/automotive" },
+    { title: "Cleaning",         path: "/category/cleaning" },
+    { title: "Organization",     path: "/category/organization" },
+    { title: "Side Hustles",     path: "/category/side-hustles" },
   ];
 
-  const toggleMenu = () => setIsOpen(!isOpen);
+  const toggleMenu = () => setIsOpen((v) => !v);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -28,7 +29,6 @@ export default function Header() {
         setIsOpen(false);
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -52,10 +52,16 @@ export default function Header() {
         </Link>
       </div>
 
-      {/* Right: Hamburger menu */}
-      <div className="w-1/3 flex justify-end relative">
+      {/* Right: Search + Categories */}
+      <div className="w-1/3 flex items-center justify-end gap-3 relative">
+        {/* Search box */}
+        <SearchBox />
+
+        {/* Categories button */}
         <button
           onClick={toggleMenu}
+          aria-haspopup="true"
+          aria-expanded={isOpen}
           className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg z-10"
         >
           <svg
@@ -74,7 +80,8 @@ export default function Header() {
         {isOpen && (
           <div
             ref={menuRef}
-            className="absolute right-0 mt-2 w-56 bg-white border shadow-lg rounded-md py-2 z-50"
+            className="absolute right-0 top-full mt-2 w-56 bg-white border shadow-lg rounded-md py-2 z-50"
+            role="menu"
           >
             {categories.map((cat) => (
               <Link
@@ -90,5 +97,5 @@ export default function Header() {
         )}
       </div>
     </header>
-  )
+  );
 }
