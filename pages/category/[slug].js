@@ -4,7 +4,7 @@ import Image from "next/image";
 import { sanityFetch } from "../../lib/sanityFetch";
 import { urlFor } from "../../lib/sanity";
 
-const PER_PAGE = 15;
+const PER_PAGE = 12;
 
 export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
@@ -43,7 +43,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         ))}
       </ul>
 
-      {/* pagination */}
+      {/* simple prev/next */}
       {pageCount > 1 && (
         <nav className="flex items-center justify-between mt-8">
           <PageLink
@@ -86,37 +86,34 @@ export async function getServerSideProps({ params, query }) {
   const slug = params.slug;
   const page = Math.max(1, parseInt(query.page ?? "1", 10));
 
-  // A tolerant alternate: historical “Automotive DIY” slugifies to "automotive-diy"
-  // Your route is "/category/automotive", so we match either.
-  const altSlug = slug.endsWith("-diy") ? slug.replace(/-diy$/, "") : `${slug}-diy`;
-
-  // GROQ:
-  // - match reference categories by their slug
-  // - OR match plain-text categories by slugifying them on the fly
-  // - exclude drafts, hidden, and future-dated
+  // Find the category _id for references, then fetch posts that match EITHER:
+  //  - reference to that category, OR
+  //  - old string category whose kebab-cased value equals the slug
   const GROQ = `
-    *[
+  {
+    "catId": *[_type == "category" && slug.current == $slug][0]._id,
+    "items": *[
       _type == "post" &&
       defined(slug.current) &&
-      publishedAt < now() &&
       !(_id in path("drafts.**")) &&
-      (!defined(hidden) || hidden == false) &&
+      publishedAt < now() &&
       (
-        (defined(category->slug.current) && category->slug.current in [$slug, $alt]) ||
-        lower(replace(coalesce(category, ""), "[^a-zA-Z0-9]+", "-")) in [$slug, $alt]
+        (defined(^.catId) && references(^.catId)) ||
+        lower(replace(string(category), " ", "-")) == $slug
       )
     ] | order(publishedAt desc){
       title,
       "slug": slug.current,
       excerpt,
       mainImage,
-      "categoryTitle": coalesce(category->title, category),
-      "catSlug": coalesce(category->slug.current, lower(replace(coalesce(category, ""), "[^a-zA-Z0-9]+", "-"))),
+      "categoryTitle": coalesce(category->title, string(category)),
       publishedAt
     }
-  `;
+  }`;
 
-  const all = (await sanityFetch(GROQ, { slug, alt: altSlug })) ?? [];
+  const data = await sanityFetch(GROQ, { slug });
+  const all = data?.items ?? [];
+
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
