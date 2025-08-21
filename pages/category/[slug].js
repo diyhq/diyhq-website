@@ -1,30 +1,24 @@
 // pages/category/[slug].js
 import Link from "next/link";
 import Image from "next/image";
-import Head from "next/head";
 import { sanityFetch } from "../../lib/sanityFetch";
 import { urlFor } from "../../lib/sanity";
 
 const PER_PAGE = 15;
 
 export default function CategoryPage({ slug, page, pageCount, posts }) {
-  const niceTitle = (slug || "").replace(/-/g, " ");
-
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
-      <Head>
-        <title>{niceTitle} – DIY HQ</title>
-        <meta name="robots" content="index,follow" />
-      </Head>
+      <h1 className="text-2xl font-semibold mb-6 capitalize">
+        {slug.replaceAll("-", " ")}
+      </h1>
 
-      <h1 className="text-2xl font-semibold mb-6 capitalize">{niceTitle}</h1>
-
-      {(!posts || posts.length === 0) && (
+      {posts.length === 0 && (
         <p className="text-gray-600">No posts found in this category yet.</p>
       )}
 
       <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {posts?.map((p) => (
+        {posts.map((p) => (
           <li key={p.slug} className="border rounded-md overflow-hidden bg-white">
             <Link href={`/post/${p.slug}`} className="block">
               {p.mainImage && (
@@ -58,11 +52,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
           >
             ← Previous
           </PageLink>
-
-          <span className="text-sm text-gray-600">
-            Page {page} of {pageCount}
-          </span>
-
+          <span className="text-sm text-gray-600">Page {page} of {pageCount}</span>
           <PageLink
             disabled={page >= pageCount}
             href={`/category/${slug}?page=${page + 1}`}
@@ -94,13 +84,19 @@ export async function getServerSideProps({ params, query }) {
   const slug = params.slug;
   const page = Math.max(1, parseInt(query.page ?? "1", 10));
 
-  // Works for either a referenced category (category->slug.current)
-  // or a simple string category (category == $slug).
+  // Posts in this category (works whether category is a reference or a plain string).
+  // Excludes drafts and posts with hidden == true.
   const GROQ = `
-    *[_type == "post" && defined(slug.current) && (
-      (defined(category->slug.current) && category->slug.current == $slug) ||
-      (category == $slug)
-    )] | order(publishedAt desc){
+    *[
+      _type == "post"
+      && defined(slug.current)
+      && !(_id in path("drafts.**"))
+      && (
+        (defined(category->slug.current) && category->slug.current == $slug)
+        || (defined(category) && lower(category) == $slug)
+      )
+      && (!defined(hidden) || hidden == false)
+    ] | order(publishedAt desc){
       title,
       "slug": slug.current,
       excerpt,
@@ -110,10 +106,15 @@ export async function getServerSideProps({ params, query }) {
     }
   `;
 
-  const all = (await sanityFetch(GROQ, { slug })) || [];
-  const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
-  const start = (page - 1) * PER_PAGE;
-  const posts = all.slice(start, start + PER_PAGE);
+  try {
+    const all = (await sanityFetch(GROQ, { slug })) ?? [];
+    const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
+    const start = (page - 1) * PER_PAGE;
+    const posts = all.slice(start, start + PER_PAGE);
 
-  return { props: { slug, page, pageCount, posts } };
+    return { props: { slug, page, pageCount, posts } };
+  } catch (err) {
+    console.error("Category page GROQ failed:", err);
+    return { props: { slug, page, pageCount: 1, posts: [] } };
+  }
 }
