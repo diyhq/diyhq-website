@@ -1,3 +1,4 @@
+// components/Header.js
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -8,21 +9,20 @@ export default function Header() {
   const menuRef = useRef(null);
 
   const categories = [
-    { title: "Home Repair",      path: "/category/home-repair" },
-    { title: "Tools & Gear",     path: "/category/tools-gear" },
-    { title: "Renovation",       path: "/category/renovation" },
-    { title: "Yard & Garden",    path: "/category/yard-garden" },
-    { title: "Smart Home",       path: "/category/smart-home" },
-    { title: "Beginner Guides",  path: "/category/beginner-guides" },
-    { title: "Automotive",       path: "/category/automotive" },
-    { title: "Cleaning",         path: "/category/cleaning" },
-    { title: "Organization",     path: "/category/organization" },
-    { title: "Side Hustles",     path: "/category/side-hustles" },
+    { title: "Home Repair", path: "/category/home-repair" },
+    { title: "Tools & Gear", path: "/category/tools-gear" },
+    { title: "Renovation", path: "/category/renovation" },
+    { title: "Yard & Garden", path: "/category/yard-garden" },
+    { title: "Smart Home", path: "/category/smart-home" },
+    { title: "Beginner Guides", path: "/category/beginner-guides" },
+    { title: "Automotive", path: "/category/automotive" },
+    { title: "Cleaning", path: "/category/cleaning" },
+    { title: "Organization", path: "/category/organization" },
+    { title: "Side Hustles", path: "/category/side-hustles" },
   ];
 
-  const toggleMenu = () => setIsOpen((v) => !v);
+  const toggleMenu = () => setIsOpen(!isOpen);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -52,16 +52,12 @@ export default function Header() {
         </Link>
       </div>
 
-      {/* Right: Search + Categories */}
+      {/* Right: Search + Hamburger */}
       <div className="w-1/3 flex items-center justify-end gap-3 relative">
-        {/* Search box */}
         <SearchBox />
 
-        {/* Categories button */}
         <button
           onClick={toggleMenu}
-          aria-haspopup="true"
-          aria-expanded={isOpen}
           className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg z-10"
         >
           <svg
@@ -80,8 +76,7 @@ export default function Header() {
         {isOpen && (
           <div
             ref={menuRef}
-            className="absolute right-0 top-full mt-2 w-56 bg-white border shadow-lg rounded-md py-2 z-50"
-            role="menu"
+            className="absolute right-0 mt-2 w-56 bg-white border shadow-lg rounded-md py-2 z-50"
           >
             {categories.map((cat) => (
               <Link
