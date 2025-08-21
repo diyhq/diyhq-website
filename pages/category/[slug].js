@@ -1,116 +1,105 @@
 // pages/category/[slug].js
-import Head from 'next/head';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
-import { sanityClient } from '../../lib/sanity';
-// If your urlFor helper lives in a separate file, use:
-//   import { urlFor } from '../../lib/urlFor';
-import { urlFor } from '../../lib/sanity';
+import Link from "next/link";
+import Image from "next/image";
+import { sanityFetch } from "../../lib/sanityFetch";
+import { urlFor } from "../../lib/sanity";
 
-export default function CategoryPage({ category, posts = [] }) {
-  const router = useRouter();
-  if (router.isFallback) return <p>Loading...</p>;
-  if (!category) return <p>Category not found.</p>;
+const PER_PAGE = 15;
 
+export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
-    <>
-      <Head>
-        <title>{category.title} | DIY HQ</title>
-        {/* Optional: use a description field on category if you add it later */}
-        {/* <meta name="description" content={category.description || category.title} /> */}
-      </Head>
+    <main className="max-w-6xl mx-auto px-4 py-8">
+      <h1 className="text-2xl font-semibold mb-6 capitalize">{slug.replaceAll("-", " ")}</h1>
 
-      <main className="max-w-4xl mx-auto p-4">
-        <h1 className="text-4xl font-bold mb-6">{category.title}</h1>
+      {posts.length === 0 && (
+        <p className="text-gray-600">No posts found in this category yet.</p>
+      )}
 
-        {posts.length === 0 ? (
-          <p>No posts in this category yet.</p>
-        ) : (
-          <ul className="space-y-6">
-            {posts.map((post) => (
-              <li
-                key={post._id}
-                className="flex items-start space-x-4 bg-white border rounded-md shadow-sm hover:shadow-md transition duration-200 p-2"
-              >
-                {post.mainImage?.asset?._ref && (
-                  <img
-                    src={urlFor(post.mainImage).width(120).height(80).url()}
-                    alt={post.imageAlt || `${post.title} – ${category.title}`}
-                    className="w-[120px] h-[80px] object-cover rounded-md"
-                    loading="lazy"
+      <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {posts.map((p) => (
+          <li key={p.slug} className="border rounded-md overflow-hidden bg-white">
+            <Link href={`/post/${p.slug}`} className="block">
+              {p.mainImage && (
+                <div className="relative aspect-[16/9]">
+                  <Image
+                    src={urlFor(p.mainImage).width(800).height(450).fit("crop").url()}
+                    alt={p.title || "Post image"}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 33vw"
                   />
-                )}
-
-                <div>
-                  <Link href={`/post/${post.slug.current}`}>
-                    <a className="text-xl font-semibold text-blue-600 hover:underline">
-                      {post.title}
-                    </a>
-                  </Link>
-
-                  <div className="text-sm text-gray-500 mt-1 space-y-0.5">
-                    {post.estimatedTime && <p>⏱ {post.estimatedTime}</p>}
-                    {post.estimatedCost && <p>💰 {post.estimatedCost}</p>}
-                  </div>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
-    </>
+              )}
+              <div className="p-4">
+                <h3 className="font-medium mb-1">{p.title}</h3>
+                {p.excerpt && (
+                  <p className="text-sm text-gray-700 line-clamp-3">{p.excerpt}</p>
+                )}
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      {/* pagination */}
+      {pageCount > 1 && (
+        <nav className="flex items-center justify-between mt-8">
+          <PageLink
+            disabled={page <= 1}
+            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ""}`}
+          >
+            ← Previous
+          </PageLink>
+          <span className="text-sm text-gray-600">Page {page} of {pageCount}</span>
+          <PageLink
+            disabled={page >= pageCount}
+            href={`/category/${slug}?page=${page + 1}`}
+          >
+            Next →
+          </PageLink>
+        </nav>
+      )}
+    </main>
   );
 }
 
-export async function getStaticProps({ params }) {
-  // 1) Find the category by slug
-  const category = await sanityClient.fetch(
-    `*[_type == "category" && slug.current == $slug][0]{
-      _id,
-      title,
-      "slug": slug.current
-      // description // <- include if you later add it to the schema
-    }`,
-    { slug: params.slug }
+function PageLink({ href, disabled, children }) {
+  if (disabled) {
+    return (
+      <span className="px-4 py-2 border rounded-md text-gray-400 cursor-not-allowed">
+        {children}
+      </span>
+    );
+  }
+  return (
+    <Link href={href} className="px-4 py-2 border rounded-md hover:bg-gray-50">
+      {children}
+    </Link>
   );
+}
 
-  if (!category) return { notFound: true };
+export async function getServerSideProps({ params, query }) {
+  const slug = params.slug;
+  const page = Math.max(1, parseInt(query.page ?? "1", 10));
 
-  // 2) Get posts that reference this category id (drafts excluded)
-  const posts = await sanityClient.fetch(
-    `*[
-      _type == "post" &&
-      !(_id in path("drafts.**")) &&
-      references($categoryId)
-    ] | order(publishedAt desc) {
-      _id,
+  const GROQ = `
+    *[_type == "post" && defined(slug.current) && (
+      (defined(category->slug.current) && category->slug.current == $slug) ||
+      (category == $slug)
+    )] | order(publishedAt desc){
       title,
-      slug,
+      "slug": slug.current,
+      excerpt,
       mainImage,
-      imageAlt,
-      estimatedTime,
-      estimatedCost
-    }`,
-    { categoryId: category._id }
-  );
+      "categoryTitle": coalesce(category->title, category),
+      publishedAt
+    }
+  `;
 
-  return {
-    props: { category, posts },
-    revalidate: 60, // ISR
-  };
-}
+  const all = await sanityFetch(GROQ, { slug }) || [];
+  const pageCount = Math.max(1, Math.ceil(all.length / ${PER_PAGE}));
+  const start = (page - 1) * ${PER_PAGE};
+  const posts = all.slice(start, start + ${PER_PAGE});
 
-export async function getStaticPaths() {
-  const slugs = await sanityClient.fetch(
-    `*[_type == "category" && defined(slug.current)][]{
-      "slug": slug.current
-    }`
-  );
-
-  return {
-    paths: slugs.map((c) => ({ params: { slug: c.slug } })),
-    // 'blocking' gives full HTML on first request and caches it,
-    // which tends to be nicer than showing a "Loading…" page.
-    fallback: 'blocking',
-  };
+  return { props: { slug, page, pageCount, posts } };
 }
