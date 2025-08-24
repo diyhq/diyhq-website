@@ -1,8 +1,8 @@
 // pages/category/[slug].js
-import Link from "next/link";
-import Image from "next/image";
-import { sanityFetch } from "../../lib/sanityFetch";
-import { urlFor } from "../../lib/urlFor";
+import Link from 'next/link';
+import Image from 'next/image';
+import { sanityFetch } from '../../lib/sanityFetch';
+import { urlFor } from '../../lib/sanity';
 
 const PER_PAGE = 15;
 
@@ -10,7 +10,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-semibold mb-6 capitalize">
-        {slug.replaceAll("-", " ")}
+        {slug.replaceAll('-', ' ')}
       </h1>
 
       {posts.length === 0 && (
@@ -24,8 +24,8 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
               {p.mainImage && (
                 <div className="relative aspect-[16/9]">
                   <Image
-                    src={urlFor(p.mainImage).width(800).height(450).fit("crop").url()}
-                    alt={p.title || "Post image"}
+                    src={urlFor(p.mainImage).width(800).height(450).fit('crop').url()}
+                    alt={p.title || 'Post image'}
                     fill
                     className="object-cover"
                     sizes="(max-width: 1024px) 100vw, 33vw"
@@ -47,7 +47,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         <nav className="flex items-center justify-between mt-8">
           <PageLink
             disabled={page <= 1}
-            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ""}`}
+            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ''}`}
           >
             ← Previous
           </PageLink>
@@ -82,26 +82,22 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = params.slug;
-  const page = Math.max(1, parseInt(query.page ?? "1", 10));
+  const slug = String(params.slug || '').toLowerCase();
+  const slugPrefix = `${slug}.*`; // tolerate “smart-home-ai-diy”, “yard-garden-outdoor-diy”, etc.
+  const page = Math.max(1, parseInt(query.page ?? '1', 10));
 
-  // Accept both shapes of "category": reference OR plain string/title.
-  // Also: published, not hidden, not a draft, not future-dated.
+  // Match either a referenced category doc’s slug OR an old string category,
+  // slugified in-GROQ, with a prefix match for “longer” historical slugs.
   const GROQ = `
     *[
       _type == "post" &&
-      defined(slug.current) &&
-      !(_id in path("drafts.**")) &&
-      publishedAt < now() &&
-      hidden != true &&
-      lower(
-        replace(
-          coalesce(category->slug.current, category->title, category, ""),
-          " ",
-          "-"
-        )
-      ) == $slug
-    ] | order(publishedAt desc){
+      !(defined(hidden) && hidden == true) &&
+      defined(publishedAt) &&
+      (
+        (defined(category->slug.current) && category->slug.current == $slug) ||
+        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
+      )
+    ] | order(publishedAt desc) {
       title,
       "slug": slug.current,
       excerpt,
@@ -111,7 +107,7 @@ export async function getServerSideProps({ params, query }) {
     }
   `;
 
-  const all = (await sanityFetch(GROQ, { slug })) || [];
+  const all = (await sanityFetch(GROQ, { slug, slugPrefix })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
