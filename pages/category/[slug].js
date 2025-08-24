@@ -1,19 +1,17 @@
 // pages/category/[slug].js
-import Link from "next/link";
-import Image from "next/image";
-import { sanityFetch } from "../../lib/sanityFetch";
-import { urlFor } from "../../lib/sanity";
+import Link from 'next/link';
+import Image from 'next/image';
+import { sanityFetch } from '../../lib/sanityFetch';
+import { urlFor } from '../../lib/urlFor';
 
 const PER_PAGE = 15;
 
 export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-semibold mb-6 capitalize">
-        {slug.replaceAll("-", " ")}
-      </h1>
+      <h1 className="text-2xl font-semibold mb-6 capitalize">{slug.replaceAll('-', ' ')}</h1>
 
-      {posts.length === 0 && (
+      {(!posts || posts.length === 0) && (
         <p className="text-gray-600">No posts found in this category yet.</p>
       )}
 
@@ -24,8 +22,8 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
               {p.mainImage && (
                 <div className="relative aspect-[16/9]">
                   <Image
-                    src={urlFor(p.mainImage).width(800).height(450).fit("crop").url()}
-                    alt={p.title || "Post image"}
+                    src={urlFor(p.mainImage).width(800).height(450).fit('crop').url()}
+                    alt={p.title || 'Post image'}
                     fill
                     className="object-cover"
                     sizes="(max-width: 1024px) 100vw, 33vw"
@@ -47,7 +45,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         <nav className="flex items-center justify-between mt-8">
           <PageLink
             disabled={page <= 1}
-            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ""}`}
+            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ''}`}
           >
             ← Previous
           </PageLink>
@@ -82,18 +80,14 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = String(params.slug || "").toLowerCase();
+  const slug = String(params.slug || '').toLowerCase().trim();
 
-  // IMPORTANT: GROQ `match` wants glob wildcards, not regex.
-  // Use `${slug}*` (NOT `${slug}.*`).
+  // GROQ `match` uses * as wildcard. We accept "automotive", "automotive-diy", etc.
   const slugPrefix = `${slug}*`;
+  const page = Math.max(1, parseInt(query.page ?? '1', 10));
 
-  const page = Math.max(1, parseInt(query.page ?? "1", 10));
-
-  // Match either a referenced category doc’s slug OR a legacy string `category`
-  // normalized in-GROQ. No hard filter on publishedAt/mainImage/excerpt.
-  // Sort with a safe fallback so posts missing publishedAt still sort sensibly.
-  const GROQ = /* groq */ `
+  // Match either a referenced category doc’s slug OR an old string category
+  const GROQ = `
     *[
       _type == "post" &&
       !(defined(hidden) && hidden == true) &&
@@ -101,13 +95,13 @@ export async function getServerSideProps({ params, query }) {
         (defined(category->slug.current) && category->slug.current == $slug) ||
         lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
       )
-    ] | order(coalesce(publishedAt, _createdAt) desc) {
+    ]
+    | order(coalesce(publishedAt, _createdAt) desc) {
       title,
       "slug": slug.current,
       excerpt,
       mainImage,
       "categoryTitle": coalesce(category->title, category),
-      "categorySlug": coalesce(category->slug.current, lower(replace(string(category), "[^a-z0-9]+", "-"))),
       "publishedAt": coalesce(publishedAt, _createdAt)
     }
   `;
