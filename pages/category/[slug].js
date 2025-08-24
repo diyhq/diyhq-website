@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { sanityFetch } from '../../lib/sanityFetch';
-import { urlFor } from '../../lib/sanity';
+import { urlFor } from '../../lib/urlFor';   // ✅ fixed import
 
 const PER_PAGE = 15;
 
@@ -86,8 +86,6 @@ export async function getServerSideProps({ params, query }) {
   const slugPrefix = `${slug}.*`; // tolerate “smart-home-ai-diy”, “yard-garden-outdoor-diy”, etc.
   const page = Math.max(1, parseInt(query.page ?? '1', 10));
 
-  // Match either a referenced category doc’s slug OR an old string category,
-  // slugified in-GROQ, with a prefix match for “longer” historical slugs.
   const GROQ = `
     *[
       _type == "post" &&
