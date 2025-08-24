@@ -1,11 +1,12 @@
 // pages/category/[slug].js
 import Link from 'next/link';
 import Image from 'next/image';
-import { sanityFetch } from '../../lib/sanityFetch';
-import { urlFor } from '../../lib/urlFor';
+import {sanityFetch} from '../../lib/sanityFetch';
+import {urlFor} from '../../lib/urlFor';
 
 const PER_PAGE = 15;
 
+// Single SSR page (no build-time fetch), supports string OR reference category
 export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -68,41 +69,29 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
 
 function PageLink({ href, disabled, children }) {
   if (disabled) {
-    return (
-      <span className="px-4 py-2 border rounded-md text-gray-400 cursor-not-allowed">
-        {children}
-      </span>
-    );
+    return <span className="px-4 py-2 border rounded-md text-gray-400 cursor-not-allowed">{children}</span>;
   }
-  return (
-    <Link href={href} className="px-4 py-2 border rounded-md hover:bg-gray-50">
-      {children}
-    </Link>
-  );
+  return <Link href={href} className="px-4 py-2 border rounded-md hover:bg-gray-50">{children}</Link>;
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = String(params.slug || '').toLowerCase();
+  const slug = params.slug;
   const page = Math.max(1, parseInt(query.page ?? '1', 10));
 
-  // Accept common variants so legacy data still matches
-  const alts = Array.from(
-    new Set([
-      slug,
-      slug.replace(/-/g, ' '),
-      slug.replace(/-/g, ''),
-    ].map((s) => s.toLowerCase()))
-  );
-
-  const GROQ = /* groq */ `
+  // Works for either a reference field or a plain string field in your schema.
+  // Excludes drafts & hidden; requires publishedAt in the past.
+  const GROQ = `
     *[
       _type == "post" &&
       defined(slug.current) &&
       !(_id in path('drafts.**')) &&
       publishedAt < now() &&
-      !coalesce(hidden, false) &&
-      lower(coalesce(category->slug.current, category)) in $alts
-    ] | order(publishedAt desc) {
+      (
+        category == $slug ||
+        lower(replace(category, " ", "-")) == $slug ||
+        (defined(category->slug.current) && category->slug.current == $slug)
+      )
+    ] | order(publishedAt desc){
       title,
       "slug": slug.current,
       excerpt,
@@ -112,7 +101,7 @@ export async function getServerSideProps({ params, query }) {
     }
   `;
 
-  const all = (await sanityFetch(GROQ, { alts })) || [];
+  const all = (await sanityFetch(GROQ, { slug })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
