@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { sanityFetch } from "../../lib/sanityFetch";
-import { urlFor } from "../../lib/urlFor";
+import { urlFor } from "../../lib/sanity";
 
 const PER_PAGE = 15;
 
@@ -21,7 +21,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         {posts.map((p) => (
           <li key={p.slug} className="border rounded-md overflow-hidden bg-white">
             <Link href={`/post/${p.slug}`} className="block">
-              {p.mainImage && p.mainImage.asset?._ref && (
+              {p.mainImage && (
                 <div className="relative aspect-[16/9]">
                   <Image
                     src={urlFor(p.mainImage).width(800).height(450).fit("crop").url()}
@@ -37,9 +37,6 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
                 {p.excerpt && (
                   <p className="text-sm text-gray-700 line-clamp-3">{p.excerpt}</p>
                 )}
-                <p className="mt-2 text-xs text-gray-500">
-                  {p.categoryTitle || p.categorySlug}
-                </p>
               </div>
             </Link>
           </li>
@@ -85,33 +82,37 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = String(params.slug || "").toLowerCase().trim();
+  const slug = String(params.slug || "").toLowerCase();
+
+  // IMPORTANT: GROQ `match` wants glob wildcards, not regex.
+  // Use `${slug}*` (NOT `${slug}.*`).
+  const slugPrefix = `${slug}*`;
+
   const page = Math.max(1, parseInt(query.page ?? "1", 10));
 
-  // IMPORTANT: this is identical in spirit to /api/debug-category.
-  // It tolerates: proper category reference, legacy string category, OR title match as a fallback.
-  const GROQ = `
+  // Match either a referenced category doc’s slug OR a legacy string `category`
+  // normalized in-GROQ. No hard filter on publishedAt/mainImage/excerpt.
+  // Sort with a safe fallback so posts missing publishedAt still sort sensibly.
+  const GROQ = /* groq */ `
     *[
       _type == "post" &&
       !(defined(hidden) && hidden == true) &&
       (
         (defined(category->slug.current) && category->slug.current == $slug) ||
-        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slug ||
-        lower(title) match $slug  // temporary fallback for legacy items
+        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
       )
     ] | order(coalesce(publishedAt, _createdAt) desc) {
       title,
       "slug": slug.current,
       excerpt,
       mainImage,
-      "categorySlug": coalesce(category->slug.current, string(category)),
       "categoryTitle": coalesce(category->title, category),
-      publishedAt,
-      _createdAt
+      "categorySlug": coalesce(category->slug.current, lower(replace(string(category), "[^a-z0-9]+", "-"))),
+      "publishedAt": coalesce(publishedAt, _createdAt)
     }
   `;
 
-  const all = (await sanityFetch(GROQ, { slug })) || [];
+  const all = (await sanityFetch(GROQ, { slug, slugPrefix })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
