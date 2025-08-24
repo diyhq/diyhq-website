@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { sanityFetch } from '../../lib/sanityFetch';
-import { urlFor } from '../../lib/urlFor';   // ✅ fixed import
+import { urlFor } from '../../lib/urlFor';
 
 const PER_PAGE = 15;
 
@@ -13,7 +13,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         {slug.replaceAll('-', ' ')}
       </h1>
 
-      {posts.length === 0 && (
+      {(!posts || posts.length === 0) && (
         <p className="text-gray-600">No posts found in this category yet.</p>
       )}
 
@@ -83,29 +83,30 @@ function PageLink({ href, disabled, children }) {
 
 export async function getServerSideProps({ params, query }) {
   const slug = String(params.slug || '').toLowerCase();
-  const slugPrefix = `${slug}.*`; // tolerate “smart-home-ai-diy”, “yard-garden-outdoor-diy”, etc.
   const page = Math.max(1, parseInt(query.page ?? '1', 10));
 
+  // Match either category->slug or legacy string category, same as debug endpoint
   const GROQ = `
     *[
       _type == "post" &&
       !(defined(hidden) && hidden == true) &&
       defined(publishedAt) &&
       (
-        (defined(category->slug.current) && category->slug.current == $slug) ||
-        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
+        category->slug.current == $slug ||
+        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) == $slug
       )
     ] | order(publishedAt desc) {
       title,
       "slug": slug.current,
       excerpt,
       mainImage,
+      "categorySlug": category->slug.current,
       "categoryTitle": coalesce(category->title, category),
       publishedAt
     }
   `;
 
-  const all = (await sanityFetch(GROQ, { slug, slugPrefix })) || [];
+  const all = (await sanityFetch(GROQ, { slug })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
