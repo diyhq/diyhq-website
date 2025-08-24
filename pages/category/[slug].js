@@ -21,8 +21,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         {posts.map((p) => (
           <li key={p.slug} className="border rounded-md overflow-hidden bg-white">
             <Link href={`/post/${p.slug}`} className="block">
-              {/* Image (optional) */}
-              {p.mainImage && (
+              {p.mainImage && p.mainImage.asset?._ref && (
                 <div className="relative aspect-[16/9]">
                   <Image
                     src={urlFor(p.mainImage).width(800).height(450).fit("crop").url()}
@@ -33,16 +32,14 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
                   />
                 </div>
               )}
-
               <div className="p-4">
-                <h3 className="font-medium mb-1">
-                  {p.title || "(Untitled post)"}
-                </h3>
-
-                {/* Excerpt (optional) */}
+                <h3 className="font-medium mb-1">{p.title}</h3>
                 {p.excerpt && (
                   <p className="text-sm text-gray-700 line-clamp-3">{p.excerpt}</p>
                 )}
+                <p className="mt-2 text-xs text-gray-500">
+                  {p.categoryTitle || p.categorySlug}
+                </p>
               </div>
             </Link>
           </li>
@@ -88,39 +85,33 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = String(params.slug || "").toLowerCase();
-  // 🔧 GROQ uses glob wildcards, NOT regex. Use `${slug}*` (NOT `${slug}.*`)
-  const slugPrefix = `${slug}*`;
-
+  const slug = String(params.slug || "").toLowerCase().trim();
   const page = Math.max(1, parseInt(query.page ?? "1", 10));
 
-  // Show posts:
-  //  • in the exact referenced category (recommended)
-  //  • OR legacy posts where a string category slugifies to the same prefix
-  //
-  // We DO NOT require `publishedAt` so old/unpublished “test” posts can render.
-  // If you only want published content, add `defined(publishedAt)` back.
+  // IMPORTANT: this is identical in spirit to /api/debug-category.
+  // It tolerates: proper category reference, legacy string category, OR title match as a fallback.
   const GROQ = `
     *[
       _type == "post" &&
       !(defined(hidden) && hidden == true) &&
       (
         (defined(category->slug.current) && category->slug.current == $slug) ||
-        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
+        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slug ||
+        lower(title) match $slug  // temporary fallback for legacy items
       )
-    ]
-    | order(coalesce(publishedAt, _createdAt) desc) {
+    ] | order(coalesce(publishedAt, _createdAt) desc) {
       title,
       "slug": slug.current,
       excerpt,
       mainImage,
+      "categorySlug": coalesce(category->slug.current, string(category)),
       "categoryTitle": coalesce(category->title, category),
-      "categorySlug": coalesce(category->slug.current, null),
-      publishedAt
+      publishedAt,
+      _createdAt
     }
   `;
 
-  const all = (await sanityFetch(GROQ, { slug, slugPrefix })) || [];
+  const all = (await sanityFetch(GROQ, { slug })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
