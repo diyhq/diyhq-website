@@ -1,17 +1,16 @@
 // pages/category/[slug].js
-import Link from 'next/link';
-import Image from 'next/image';
-import {sanityFetch} from '../../lib/sanityFetch';
-import {urlFor} from '../../lib/urlFor';
+import Link from "next/link";
+import Image from "next/image";
+import { sanityFetch } from "../../lib/sanityFetch";
+import { urlFor } from "../../lib/urlFor";
 
 const PER_PAGE = 15;
 
-// Single SSR page (no build-time fetch), supports string OR reference category
 export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-semibold mb-6 capitalize">
-        {slug.replaceAll('-', ' ')}
+        {slug.replaceAll("-", " ")}
       </h1>
 
       {posts.length === 0 && (
@@ -25,8 +24,8 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
               {p.mainImage && (
                 <div className="relative aspect-[16/9]">
                   <Image
-                    src={urlFor(p.mainImage).width(800).height(450).fit('crop').url()}
-                    alt={p.title || 'Post image'}
+                    src={urlFor(p.mainImage).width(800).height(450).fit("crop").url()}
+                    alt={p.title || "Post image"}
                     fill
                     className="object-cover"
                     sizes="(max-width: 1024px) 100vw, 33vw"
@@ -48,7 +47,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         <nav className="flex items-center justify-between mt-8">
           <PageLink
             disabled={page <= 1}
-            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ''}`}
+            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ""}`}
           >
             ← Previous
           </PageLink>
@@ -69,28 +68,39 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
 
 function PageLink({ href, disabled, children }) {
   if (disabled) {
-    return <span className="px-4 py-2 border rounded-md text-gray-400 cursor-not-allowed">{children}</span>;
+    return (
+      <span className="px-4 py-2 border rounded-md text-gray-400 cursor-not-allowed">
+        {children}
+      </span>
+    );
   }
-  return <Link href={href} className="px-4 py-2 border rounded-md hover:bg-gray-50">{children}</Link>;
+  return (
+    <Link href={href} className="px-4 py-2 border rounded-md hover:bg-gray-50">
+      {children}
+    </Link>
+  );
 }
 
 export async function getServerSideProps({ params, query }) {
   const slug = params.slug;
-  const page = Math.max(1, parseInt(query.page ?? '1', 10));
+  const page = Math.max(1, parseInt(query.page ?? "1", 10));
 
-  // Works for either a reference field or a plain string field in your schema.
-  // Excludes drafts & hidden; requires publishedAt in the past.
+  // Accept both shapes of "category": reference OR plain string/title.
+  // Also: published, not hidden, not a draft, not future-dated.
   const GROQ = `
     *[
       _type == "post" &&
       defined(slug.current) &&
-      !(_id in path('drafts.**')) &&
+      !(_id in path("drafts.**")) &&
       publishedAt < now() &&
-      (
-        category == $slug ||
-        lower(replace(category, " ", "-")) == $slug ||
-        (defined(category->slug.current) && category->slug.current == $slug)
-      )
+      hidden != true &&
+      lower(
+        replace(
+          coalesce(category->slug.current, category->title, category, ""),
+          " ",
+          "-"
+        )
+      ) == $slug
     ] | order(publishedAt desc){
       title,
       "slug": slug.current,
