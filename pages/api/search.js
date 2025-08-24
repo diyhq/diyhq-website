@@ -1,42 +1,34 @@
 // pages/api/search.js
-import { sanityFetch } from "../../lib/sanityFetch";
+import { sanityFetch } from '../../lib/sanityFetch';
 
 export default async function handler(req, res) {
-  const term = String(req.query.q || "").trim();
+  const q = String(req.query.q || '').trim();
 
-  if (!term) {
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
-    return res.status(200).json({ results: [] });
+  if (!q) {
+    res.status(200).json({ ok: true, count: 0, results: [] });
+    return;
   }
 
-  const GROQ = `
-    *[
-      _type == "post"
-      && defined(slug.current)
+  const query = `
+    *[_type == "post" 
+      && defined(slug.current) 
       && !(_id in path("drafts.**"))
-      && (!defined(hidden) || hidden == false)
+      && hidden != true
       && (
-        title match $q
-        || excerpt match $q
-        // If you want body search later, we can add a safe version.
+        title match $term || excerpt match $term || coalesce(body[].children[].text, "") match $term
       )
-    ] | order(publishedAt desc) [0...24]{
+    ] | order(coalesce(publishedAt, _createdAt) desc)[0...20] {
       title,
       "slug": slug.current,
-      excerpt,
-      mainImage,
-      "categoryTitle": coalesce(category->title, category),
-      "category": coalesce(category->slug.current, category),
-      publishedAt
+      excerpt
     }
   `;
 
-  try {
-    const results = (await sanityFetch(GROQ, { q: `${term}*` })) ?? [];
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
-    return res.status(200).json({ results });
-  } catch (err) {
-    console.error("Search API error:", err);
-    return res.status(500).json({ error: "Search failed" });
-  }
+  const results = (await sanityFetch(query, { term: `${q}*` })) || [];
+
+  res.status(200).json({
+    ok: true,
+    count: results.length,
+    results,
+  });
 }

@@ -6,35 +6,6 @@ import { urlFor } from "../../lib/sanity";
 
 const PER_PAGE = 15;
 
-/** Aliases so your route slugs match category-doc slugs/titles in Sanity */
-const ALIASES = {
-  "automotive": ["automotive-diy"],
-  "home-repair": ["home-repair-maintenance", "home-repair-and-maintenance"],
-  "tools-gear": ["tools-gear-reviews"],
-  "renovation": ["renovation-remodeling", "renovation-and-remodeling"],
-  "yard-garden": ["yard-garden-outdoor-diy"],
-  "smart-home": ["smart-home-ai-diy"],
-  "beginner-guides": ["beginner-diy-guides"],
-  "cleaning": ["diy-cleaning-maintenance", "cleaning-maintenance"],
-  "organization": ["home-organization"],
-  "side-hustles": ["diy-business-side-hustles", "business-side-hustles"],
-};
-
-function slugSetFor(slug) {
-  const set = new Set([slug, `${slug}-diy`, `diy-${slug}`]);
-  (ALIASES[slug] || []).forEach((s) => set.add(s));
-  return Array.from(set);
-}
-function titleSetFor(slug) {
-  const base = slug.replace(/-/g, ' ');
-  const set = new Set([base, `${base} diy`, `diy ${base}`]);
-  (ALIASES[slug] || []).forEach((s) => {
-    const t = s.replace(/-/g, ' ');
-    set.add(t); set.add(`${t} diy`); set.add(`diy ${t}`);
-  });
-  return Array.from(set);
-}
-
 export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -109,25 +80,20 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = String(params.slug || "").toLowerCase();
+  const slug = params.slug;
   const page = Math.max(1, parseInt(query.page ?? "1", 10));
-  const slugs = slugSetFor(slug);
-  const titles = titleSetFor(slug);
 
-  // Match posts by: single ref -> slug, array ref -> any slug, legacy string -> title-ish
-  const GROQ = `
-    *[
-      _type == "post" &&
-      defined(slug.current) &&
-      publishedAt < now() &&
-      !(_id in path('drafts.**')) &&
-      (!defined(hidden) || hidden != true) &&
-      (
-        (defined(category->slug.current) && category->slug.current in $slugs) ||
-        (defined(categories) && count(categories[]->slug.current[@ in $slugs]) > 0) ||
-        (defined(category) && lower(category) in $titles)
+  // Pull all published posts for this category; hide drafts and hidden:true
+  const allQuery = `
+    *[_type == "post" 
+      && defined(slug.current) 
+      && !(_id in path("drafts.**")) 
+      && hidden != true
+      && (
+        (defined(category->slug.current) && category->slug.current == $slug) ||
+        (category == $slug)
       )
-    ] | order(publishedAt desc){
+    ] | order(coalesce(publishedAt, _createdAt) desc) {
       title,
       "slug": slug.current,
       excerpt,
@@ -137,7 +103,7 @@ export async function getServerSideProps({ params, query }) {
     }
   `;
 
-  const all = (await sanityFetch(GROQ, { slugs, titles })) || [];
+  const all = (await sanityFetch(allQuery, { slug })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
