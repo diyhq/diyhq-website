@@ -13,35 +13,48 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         {slug.replaceAll('-', ' ')}
       </h1>
 
-      {(!posts || posts.length === 0) && (
+      {!posts || posts.length === 0 ? (
         <p className="text-gray-600">No posts found in this category yet.</p>
-      )}
-
-      <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {posts.map((p) => (
-          <li key={p.slug} className="border rounded-md overflow-hidden bg-white">
-            <Link href={`/post/${p.slug}`} className="block">
-              {p.mainImage && (
-                <div className="relative aspect-[16/9]">
-                  <Image
-                    src={urlFor(p.mainImage).width(800).height(450).fit('crop').url()}
-                    alt={p.title || 'Post image'}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 1024px) 100vw, 33vw"
-                  />
-                </div>
-              )}
-              <div className="p-4">
-                <h3 className="font-medium mb-1">{p.title}</h3>
-                {p.excerpt && (
-                  <p className="text-sm text-gray-700 line-clamp-3">{p.excerpt}</p>
+      ) : (
+        <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {posts.map((p) => (
+            <li
+              key={p.slug}
+              className="border rounded-md overflow-hidden bg-white"
+            >
+              <Link href={`/post/${p.slug}`} className="block">
+                {p.mainImage ? (
+                  <div className="relative aspect-[16/9]">
+                    <Image
+                      src={urlFor(p.mainImage).width(800).height(450).fit('crop').url()}
+                      alt={p.mainImage?.alt || p.title || 'Post image'}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 1024px) 100vw, 33vw"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-gray-200 aspect-[16/9] flex items-center justify-center text-gray-500">
+                    No Image
+                  </div>
                 )}
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
+                <div className="p-4">
+                  <h3 className="font-medium mb-1">{p.title}</h3>
+                  {p.excerpt ? (
+                    <p className="text-sm text-gray-700 line-clamp-3">
+                      {p.excerpt}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">
+                      No excerpt available.
+                    </p>
+                  )}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {pageCount > 1 && (
         <nav className="flex items-center justify-between mt-8">
@@ -85,12 +98,11 @@ export async function getServerSideProps({ params, query }) {
   const slug = String(params.slug || '').toLowerCase();
   const page = Math.max(1, parseInt(query.page ?? '1', 10));
 
-  // Match either category->slug or legacy string category, same as debug endpoint
   const GROQ = `
     *[
       _type == "post" &&
       !(defined(hidden) && hidden == true) &&
-      defined(publishedAt) &&
+      defined(slug.current) &&
       (
         category->slug.current == $slug ||
         lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) == $slug
