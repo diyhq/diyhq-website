@@ -1,54 +1,45 @@
 // pages/api/debug-category.js
-import { sanityFetch } from "../../lib/sanityFetch";
+import { sanityFetch } from '../../lib/sanityFetch';
 
-/**
- * Debug endpoint: returns the raw posts the category page will render.
- * Usage: /api/debug-category?slug=automotive
- */
+function slugify(s = '') {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 export default async function handler(req, res) {
   try {
-    const slug = String(req.query.slug || "").trim().toLowerCase();
-    if (!slug) {
-      return res.status(400).json({ ok: false, error: "Missing ?slug=" });
-    }
-
-    // IMPORTANT: GROQ `match` uses * (NOT .*)
+    const raw = String(req.query.slug || '');
+    const slug = slugify(raw);
     const slugPrefix = `${slug}*`;
 
-    const GROQ = /* groq */ `
+    const GROQ = `
       *[
         _type == "post" &&
+        defined(slug.current) &&
         !(defined(hidden) && hidden == true) &&
         (
+          // Canonical reference form
           (defined(category->slug.current) && category->slug.current == $slug)
           ||
-          lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-"))
-            match $slugPrefix
+          // Legacy string form, normalized to slug, prefix tolerant
+          lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
         )
       ]
       | order(coalesce(publishedAt, _createdAt) desc) {
         title,
         "slug": slug.current,
-        "categorySlug": coalesce(
-          category->slug.current,
-          lower(replace(string(category), "[^a-z0-9]+", "-"))
-        ),
-        "categoryTitle": coalesce(category->title, string(category)),
-        "imageUrl": coalesce(mainImage.asset->url, mainImageUrl),
-        "publishedAt": coalesce(publishedAt, _createdAt)
+        "excerpt": coalesce(excerpt, blurb),
+        mainImage,
+        publishedAt,
+        _createdAt,
+        // helpful for debugging
+        "categorySlug": coalesce(category->slug.current, string(category)),
+        "categoryTitle": coalesce(category->title, category)
       }
     `;
 
     const posts = (await sanityFetch(GROQ, { slug, slugPrefix })) || [];
-    return res.status(200).json({
-      ok: true,
-      slug,
-      count: posts.length,
-      posts,
-    });
+    return res.status(200).json({ ok: true, slug, count: posts.length, posts });
   } catch (err) {
-    return res
-      .status(500)
-      .json({ ok: false, error: String(err?.message || err) });
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
 }
