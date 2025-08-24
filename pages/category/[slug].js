@@ -105,7 +105,8 @@ export async function getServerSideProps({ params, query }) {
       defined(slug.current) &&
       (
         category->slug.current == $slug ||
-        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) == $slug
+        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) == $slug ||
+        lower(title) match $slug
       )
     ] | order(publishedAt desc) {
       title,
