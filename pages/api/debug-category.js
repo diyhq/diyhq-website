@@ -1,44 +1,39 @@
 // pages/api/debug-category.js
-import { sanityFetch } from '../../lib/sanityFetch';
-
-function slugify(s = '') {
-  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
+import { getServerClient } from '../../lib/sanity';
 
 export default async function handler(req, res) {
   try {
-    const raw = String(req.query.slug || '');
-    const slug = slugify(raw);
+    const slug = String(req.query.slug || '').toLowerCase().trim();
+    if (!slug) return res.status(400).json({ ok: false, error: 'Missing ?slug=' });
+
+    // !!! IMPORTANT: GROQ match uses "*" (glob), not ".*" (regex)
     const slugPrefix = `${slug}*`;
 
     const GROQ = `
       *[
         _type == "post" &&
-        defined(slug.current) &&
         !(defined(hidden) && hidden == true) &&
         (
-          // Canonical reference form
           (defined(category->slug.current) && category->slug.current == $slug)
           ||
-          // Legacy string form, normalized to slug, prefix tolerant
           lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
         )
       ]
       | order(coalesce(publishedAt, _createdAt) desc) {
         title,
         "slug": slug.current,
-        "excerpt": coalesce(excerpt, blurb),
+        excerpt,
         mainImage,
+        "categorySlug": coalesce(category->slug.current, lower(replace(string(category), "[^a-z0-9]+", "-"))),
+        "categoryTitle": coalesce(category->title, category),
         publishedAt,
-        _createdAt,
-        // helpful for debugging
-        "categorySlug": coalesce(category->slug.current, string(category)),
-        "categoryTitle": coalesce(category->title, category)
+        _createdAt
       }
     `;
 
-    const posts = (await sanityFetch(GROQ, { slug, slugPrefix })) || [];
-    return res.status(200).json({ ok: true, slug, count: posts.length, posts });
+    const client = getServerClient();
+    const posts = await client.fetch(GROQ, { slug, slugPrefix });
+    return res.status(200).json({ ok: true, slug, slugPrefix, count: posts?.length || 0, posts });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
