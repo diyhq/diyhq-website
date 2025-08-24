@@ -1,8 +1,8 @@
 // pages/category/[slug].js
-import Link from "next/link";
-import Image from "next/image";
-import { sanityFetch } from "../../lib/sanityFetch";
-import { urlFor } from "../../lib/sanity";
+import Link from 'next/link';
+import Image from 'next/image';
+import { sanityFetch } from '../../lib/sanityFetch';
+import { urlFor } from '../../lib/urlFor';
 
 const PER_PAGE = 15;
 
@@ -10,7 +10,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-semibold mb-6 capitalize">
-        {slug.replaceAll("-", " ")}
+        {slug.replaceAll('-', ' ')}
       </h1>
 
       {posts.length === 0 && (
@@ -24,8 +24,8 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
               {p.mainImage && (
                 <div className="relative aspect-[16/9]">
                   <Image
-                    src={urlFor(p.mainImage).width(800).height(450).fit("crop").url()}
-                    alt={p.title || "Post image"}
+                    src={urlFor(p.mainImage).width(800).height(450).fit('crop').url()}
+                    alt={p.title || 'Post image'}
                     fill
                     className="object-cover"
                     sizes="(max-width: 1024px) 100vw, 33vw"
@@ -47,11 +47,13 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         <nav className="flex items-center justify-between mt-8">
           <PageLink
             disabled={page <= 1}
-            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ""}`}
+            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ''}`}
           >
             ← Previous
           </PageLink>
-          <span className="text-sm text-gray-600">Page {page} of {pageCount}</span>
+          <span className="text-sm text-gray-600">
+            Page {page} of {pageCount}
+          </span>
           <PageLink
             disabled={page >= pageCount}
             href={`/category/${slug}?page=${page + 1}`}
@@ -80,20 +82,27 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = params.slug;
-  const page = Math.max(1, parseInt(query.page ?? "1", 10));
+  const slug = String(params.slug || '').toLowerCase();
+  const page = Math.max(1, parseInt(query.page ?? '1', 10));
 
-  // Pull all published posts for this category; hide drafts and hidden:true
-  const allQuery = `
-    *[_type == "post" 
-      && defined(slug.current) 
-      && !(_id in path("drafts.**")) 
-      && hidden != true
-      && (
-        (defined(category->slug.current) && category->slug.current == $slug) ||
-        (category == $slug)
-      )
-    ] | order(coalesce(publishedAt, _createdAt) desc) {
+  // Accept common variants so legacy data still matches
+  const alts = Array.from(
+    new Set([
+      slug,
+      slug.replace(/-/g, ' '),
+      slug.replace(/-/g, ''),
+    ].map((s) => s.toLowerCase()))
+  );
+
+  const GROQ = /* groq */ `
+    *[
+      _type == "post" &&
+      defined(slug.current) &&
+      !(_id in path('drafts.**')) &&
+      publishedAt < now() &&
+      !coalesce(hidden, false) &&
+      lower(coalesce(category->slug.current, category)) in $alts
+    ] | order(publishedAt desc) {
       title,
       "slug": slug.current,
       excerpt,
@@ -103,7 +112,7 @@ export async function getServerSideProps({ params, query }) {
     }
   `;
 
-  const all = (await sanityFetch(allQuery, { slug })) || [];
+  const all = (await sanityFetch(GROQ, { alts })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);

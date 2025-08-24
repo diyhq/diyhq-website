@@ -1,19 +1,31 @@
 // pages/api/debug-sanity.js
-import { sanityFetch } from '../../lib/sanityFetch'
+import { sanityFetch } from '../../lib/sanityFetch';
 
 export default async function handler(req, res) {
-  try {
-    const ping = await sanityFetch('*[_type == "post"][0]{_id,title, "slug": slug.current}')
-    res.status(200).json({
-      ok: true,
-      env: {
-        SANITY_PROJECT_ID: process.env.SANITY_PROJECT_ID || '(fallback plkjpsnw)',
-        SANITY_DATASET: process.env.SANITY_DATASET || 'production',
-        HAS_TOKEN: Boolean(process.env.SANITY_READ_TOKEN),
-      },
-      samplePost: ping || null,
-    })
-  } catch (err) {
-    res.status(500).json({ ok: false, message: err.message })
-  }
+  const slug = String((req.query.slug || '').toString().trim().toLowerCase());
+  const alts = Array.from(
+    new Set([
+      slug,
+      slug.replace(/-/g, ' '),
+      slug.replace(/-/g, ''),
+    ].map((s) => s.toLowerCase()))
+  );
+
+  const q = `
+    *[
+      _type == "post" &&
+      defined(slug.current) &&
+      !(_id in path('drafts.**')) &&
+      publishedAt < now() &&
+      !coalesce(hidden, false) &&
+      lower(coalesce(category->slug.current, category)) in $alts
+    ] | order(publishedAt desc){
+      "slug": slug.current,
+      title,
+      "cat": coalesce(category->slug.current, category)
+    }
+  `;
+
+  const docs = await sanityFetch(q, { alts });
+  res.status(200).json({ count: docs?.length || 0, items: docs || [] });
 }
