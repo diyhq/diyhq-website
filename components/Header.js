@@ -1,18 +1,27 @@
 // components/Header.js
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // Tailwind w-56 = 14rem = 224px
+const MENU_W = 224; // Tailwind w-56 = 14rem
 
 export default function Header() {
-  const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Categories menu
+  const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
-  const buttonRef = useRef(null);
+  const menuBtnRef = useRef(null);
+
+  // Mobile search
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTop, setSearchTop] = useState(0);
+  const headerRef = useRef(null);
+
+  useEffect(() => setMounted(true), []);
 
   const categories = [
     { title: "Home Repair", path: "/category/home-repair" },
@@ -27,65 +36,89 @@ export default function Header() {
     { title: "Side Hustles", path: "/category/side-hustles" },
   ];
 
-  useEffect(() => setMounted(true), []);
-
-  const openMenu = () => {
-    setIsOpen((v) => {
-      const next = !v;
-      if (next) calcMenuPosition();
-      return next;
-    });
-  };
-
+  /* ---------- Categories menu positioning ---------- */
   function calcMenuPosition() {
-    if (!buttonRef.current || typeof window === "undefined") return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    const gap = 8; // px between button and menu
+    if (!menuBtnRef.current || typeof window === "undefined") return;
+    const rect = menuBtnRef.current.getBoundingClientRect();
+    const gap = 8;
     const left = Math.min(
-      Math.max(8, rect.right - MENU_W), // keep menu inside viewport
+      Math.max(8, rect.right - MENU_W),
       window.innerWidth - MENU_W - 8
     );
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
 
-  // Close on outside click / ESC; keep open when clicking inside.
+  const toggleMenu = () => {
+    setMenuOpen((v) => {
+      const next = !v;
+      if (next) calcMenuPosition();
+      return next;
+    });
+  };
+
+  /* ---------- Global listeners for menu + search ---------- */
   useEffect(() => {
-    if (!isOpen) return;
-
-    const onDocMouseDown = (e) => {
+    const onDocClick = (e) => {
       const menuEl = menuRef.current;
-      const btnEl = buttonRef.current;
-      if (!menuEl || !btnEl) return;
-
-      if (menuEl.contains(e.target) || btnEl.contains(e.target)) return;
-      setIsOpen(false);
+      const btnEl = menuBtnRef.current;
+      if (menuOpen && menuEl && btnEl) {
+        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) setMenuOpen(false);
+      }
     };
-
     const onKey = (e) => {
-      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setSearchOpen(false);
+      }
+    };
+    const onScrollResize = () => {
+      if (menuOpen) calcMenuPosition();
+      if (headerRef.current) {
+        const r = headerRef.current.getBoundingClientRect();
+        setSearchTop(r.bottom);
+      }
     };
 
-    const onScrollOrResize = () => calcMenuPosition();
-
-    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("mousedown", onDocClick);
     window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScrollOrResize, { passive: true });
-    window.addEventListener("resize", onScrollOrResize);
-
+    window.addEventListener("scroll", onScrollResize, { passive: true });
+    window.addEventListener("resize", onScrollResize);
     return () => {
-      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("mousedown", onDocClick);
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScrollOrResize);
-      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScrollResize);
+      window.removeEventListener("resize", onScrollResize);
     };
-  }, [isOpen]);
+  }, [menuOpen]);
+
+  /* ---------- Compute mobile search panel top ---------- */
+  useEffect(() => {
+    if (!headerRef.current) return;
+    const r = headerRef.current.getBoundingClientRect();
+    setSearchTop(r.bottom);
+  }, []);
+
+  /* ---------- Prevent body scroll when mobile search is open ---------- */
+  useEffect(() => {
+    if (!mounted) return;
+    if (searchOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [searchOpen, mounted]);
 
   return (
-    <header className="bg-white border-b shadow-md px-6 py-4 relative">
-      {/* 3-column layout */}
+    <header
+      ref={headerRef}
+      className="bg-white border-b shadow-md px-4 py-3 relative"
+    >
+      {/* GRID: [left controls] [center logo] [right controls] */}
       <div className="grid grid-cols-3 items-center">
-        {/* Left spacer (keeps layout balanced) */}
+        {/* Left (empty spacer for balance on desktop) */}
         <div className="col-span-1" />
 
         {/* Center: Logo */}
@@ -102,21 +135,40 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* Right: Search (centered within the right third) + Categories button */}
-        <div className="col-span-1 relative flex items-center justify-end gap-3">
-          {/* On desktop, center the search within the right third, but keep below z-index of menu */}
+        {/* Right: (Desktop) search centered in right third + Categories button */}
+        <div className="col-span-1 flex items-center justify-end gap-3">
+          {/* Desktop search */}
           <div className="hidden md:flex flex-1 justify-center z-[20]">
             <div className="w-full max-w-[480px]">
               <SearchBox />
             </div>
           </div>
 
+          {/* Mobile search icon */}
           <button
-            ref={buttonRef}
-            onClick={openMenu}
+            className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800 z-[30]"
+            aria-label="Open search"
+            onClick={() => setSearchOpen(true)}
+          >
+            <svg
+              className="h-6 w-6"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
+
+          {/* Categories button (all breakpoints) */}
+          <button
+            ref={menuBtnRef}
+            onClick={toggleMenu}
             className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg z-[30]"
             aria-haspopup="menu"
-            aria-expanded={isOpen}
+            aria-expanded={menuOpen}
             aria-controls="site-categories-menu"
           >
             <svg
@@ -134,9 +186,9 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Dropdown menu via PORTAL: never clipped by header/search; always on top */}
+      {/* PORTAL: Categories dropdown */}
       {mounted &&
-        isOpen &&
+        menuOpen &&
         createPortal(
           <div
             ref={menuRef}
@@ -151,12 +203,52 @@ export default function Header() {
                 href={cat.path}
                 className="block px-4 py-2 text-sm text-gray-800 hover:bg-orange-100"
                 role="menuitem"
-                onClick={() => setIsOpen(false)}
+                onClick={() => setMenuOpen(false)}
               >
                 {cat.title}
               </Link>
             ))}
           </div>,
+          document.body
+        )}
+
+      {/* PORTAL: Mobile search overlay (full width, below header) */}
+      {mounted && searchOpen &&
+        createPortal(
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/30 z-[90]"
+              onClick={() => setSearchOpen(false)}
+            />
+            {/* Panel */}
+            <div
+              className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3"
+              style={{ top: `${searchTop}px` }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <SearchBox />
+                </div>
+                <button
+                  aria-label="Close search"
+                  className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100"
+                  onClick={() => setSearchOpen(false)}
+                >
+                  <svg
+                    className="h-5 w-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </>,
           document.body
         )}
     </header>
