@@ -9,17 +9,17 @@ import SocialShareBar from "../../components/SocialShareBar.jsx";
 import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-const LEFT_SLOT  = "XXXXXXXXXX";   // Display (left sidebar)
-const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
-const INART_SLOT = "ZZZZZZZZZZ";   // In-article
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+// TODO: replace with your real AdSense slot IDs when ready
+const LEFT_SLOT  = "XXXXXXXXXX";
+const RIGHT_SLOT = "YYYYYYYYYY";
+const INART_SLOT = "ZZZZZZZZZZ";
 
+/* ---------------- GROQ ---------------- */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
   estimatedTime,estimatedCost,readTime,difficultyLevel,authorAIName,commentsEnabled,updateLog,
-  featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[] ,
+  featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[],
   commonMistakes[],safetyTips[],"toolsNeeded": toolsNeeded[],"materialsNeeded": materialsNeeded[],
   "stepByStepInstructions": stepByStepInstructions[]{...,title,text,image{asset->{url}, alt}},
   mainImage{alt,caption,asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }},
@@ -116,7 +116,8 @@ function blockText(b) {
   if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
   return "";
 }
-/** Remove "Recommended Gear" when no affiliate links */
+
+/** Remove "Recommended Gear" if no affiliate links */
 function stripRecommended(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
   if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
@@ -137,7 +138,6 @@ function stripRecommended(blocks, affiliateLinks) {
     }
 
     if (skipping) return false;
-
     if (/^see our pick/i.test(text)) return false;
     if (/view on amazon/i.test(text)) return false;
     if (/affiliate code/i.test(text)) return false;
@@ -146,6 +146,7 @@ function stripRecommended(blocks, affiliateLinks) {
     return true;
   });
 }
+
 function StringBody({ text }) {
   const cleaned = sanitizePlainText(text);
   const paragraphs = cleaned
@@ -155,10 +156,13 @@ function StringBody({ text }) {
   if (paragraphs.length === 0) return null;
   return (
     <div className="prose lg:prose-lg max-w-none">
-      {paragraphs.map((p, i) => (<p key={i}>{p}</p>))}
+      {paragraphs.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
     </div>
   );
 }
+
 function kv(label, value) {
   if (!value) return null;
   return (
@@ -168,18 +172,23 @@ function kv(label, value) {
     </div>
   );
 }
+
 function toCurrency(val) {
   if (val == null) return null;
   if (typeof val === "number") return `$${val.toLocaleString()}`;
   if (typeof val === "string") return val;
   return String(val);
 }
+
 function asString(item) {
   if (!item) return null;
   if (typeof item === "string") return item;
-  if (typeof item === "object") return item.name || item.text || item.title || JSON.stringify(item);
+  if (typeof item === "object") {
+    return item.name || item.text || item.title || JSON.stringify(item);
+  }
   return String(item);
 }
+
 function maybeEmbed(videoURL) {
   if (!videoURL) return null;
   const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
@@ -207,21 +216,27 @@ function maybeEmbed(videoURL) {
     </div>
   );
 }
+
 function blocksToPlainText(blocks) {
   try {
     return blocks
       .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""))
       .join("\n");
-  } catch { return ""; }
+  } catch {
+    return "";
+  }
 }
+
 function estimateReadMinutes(post) {
   if (typeof post?.readTime === "number" && post.readTime > 0) return post.readTime;
   let text = "";
   if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
   else if (typeof post?.body === "string") text = post.body;
   const words = text ? text.trim().split(/\s+/).length : 0;
-  return Math.max(1, Math.round(words / 200));
+  const mins = Math.max(1, Math.round(words / 200));
+  return mins;
 }
+
 function NavCard({ label, item }) {
   if (!item) return null;
   const thumb = item?.mainImage?.asset?.url || null;
@@ -246,7 +261,9 @@ function NavCard({ label, item }) {
         <div className="mt-1 font-medium group-hover:underline line-clamp-2">{item.title}</div>
         {chips.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-70">
-            {chips.map((c, i) => (<span key={i}>{c}</span>))}
+            {chips.map((c, i) => (
+              <span key={i}>{c}</span>
+            ))}
           </div>
         )}
       </div>
@@ -254,7 +271,7 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- Inline Ad after the 3rd block ---------- */
+/* ---------- Inline in-article ad after the 3rd block ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
@@ -262,6 +279,7 @@ function insertInlineAd(blocks, index = 3) {
   out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
   return out;
 }
+
 const ptComponentsWithAd = {
   ...ptComponents,
   types: {
@@ -305,7 +323,7 @@ export default function PostPage({ post, nav }) {
     seoDescription || (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
   const imageUrl = mainImage?.asset?.url || null;
   const imageAlt = mainImage?.alt || displayTitle;
-  const caption  = mainImage?.caption || mainImage?.alt || null;
+  const caption = mainImage?.caption || mainImage?.alt || null;
 
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
   const readMins = estimateReadMinutes(post);
@@ -349,11 +367,13 @@ export default function PostPage({ post, nav }) {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
       </Head>
 
+      {/* Load AdSense only on post pages */}
       <AdSenseHead />
 
       {/* OUTER CONTAINER + GRID: [250px ad | 900px article | 250px ad] */}
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
+
           {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
@@ -368,14 +388,12 @@ export default function PostPage({ post, nav }) {
           {/* MAIN CONTENT */}
           <main>
             <article className="mx-auto py-10">
-              {/* Title (NO card, NO shadow) */}
+              {/* Title (no box/shadow) */}
               <header className="mb-4">
-                <h1 className="text-3xl font-bold leading-tight tracking-tight">
-                  {displayTitle}
-                </h1>
+                <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
               </header>
 
-              {/* Hero with subtle shadow */}
+              {/* Hero (with subtle shadow) */}
               {imageUrl ? (
                 <figure className="mb-2">
                   <Image
@@ -383,12 +401,10 @@ export default function PostPage({ post, nav }) {
                     alt={imageAlt}
                     width={1200}
                     height={630}
-                    className="w-full h-auto rounded-xl shadow-md"
+                    className="w-full h-auto rounded-xl shadow-lg"
                     priority
                   />
-                  {caption && (
-                    <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
-                  )}
+                  {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
                 </figure>
               ) : (
                 <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
@@ -396,9 +412,9 @@ export default function PostPage({ post, nav }) {
                 </div>
               )}
 
-              {/* Meta row (simple line, no card) */}
-              <section className="mt-3 mb-5 text-sm text-gray-600">
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
+              {/* Meta row under hero (with grey box) */}
+              <section className="mt-3 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
                   {kv("Author", author?.name || authorAIName)}
                   {kv("Skill Level", difficultyLevel)}
                   {kv("Read Time", readMins ? `${readMins} min` : null)}
@@ -457,7 +473,7 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Body with inline Ad */}
+              {/* Body with inline in-article ad after the 3rd block */}
               {Array.isArray(body) ? (
                 <div className="prose lg:prose-lg max-w-none">
                   <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
@@ -477,10 +493,10 @@ export default function PostPage({ post, nav }) {
                   <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
                   <ol className="list-decimal pl-6 space-y-6">
                     {steps.map((s, i) => {
-                      const stepText  = asString(s?.text) || asString(s);
+                      const stepText = asString(s?.text) || asString(s);
                       const stepTitle = s?.title ? String(s.title) : null;
                       const stepImage = s?.image?.asset?.url || null;
-                      const stepAlt   = s?.image?.alt || stepTitle || `Step ${i + 1}`;
+                      const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
                       return (
                         <li key={i}>
                           {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
@@ -617,6 +633,7 @@ export async function getStaticProps({ params }) {
       );
     }
 
+    // strip "Recommended Gear" section when no affiliate links
     if (Array.isArray(post.body)) post.body = stripRecommended(post.body, post.affiliateLinks);
 
     let nav = { prev: null, next: null };

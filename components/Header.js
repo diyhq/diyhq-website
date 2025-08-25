@@ -5,56 +5,60 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // w-56
+const MENU_W = 224; // Tailwind w-56 (14rem)
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories menu
+  // Categories (right) menu state
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search
+  // Mobile search panel state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
   const headerRef = useRef(null);
-
   useEffect(() => setMounted(true), []);
 
-  // Position categories dropdown (portal)
+  // ---- Position Categories portal
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
-    const r = menuBtnRef.current.getBoundingClientRect();
+    const rect = menuBtnRef.current.getBoundingClientRect();
     const gap = 8;
     const left = Math.min(
-      Math.max(8, r.right - MENU_W),
+      Math.max(8, rect.right - MENU_W),
       window.innerWidth - MENU_W - 8
     );
-    const top = r.bottom + gap;
+    const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
   const toggleMenu = () => {
-    setMenuOpen(v => {
-      const n = !v;
-      if (n) calcMenuPosition();
-      return n;
+    setMenuOpen((v) => {
+      const next = !v;
+      if (next) calcMenuPosition();
+      return next;
     });
   };
 
-  // Global listeners
+  // ---- Global listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
-      const btnEl  = menuBtnRef.current;
+      const btnEl = menuBtnRef.current;
       if (menuOpen && menuEl && btnEl) {
-        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) setMenuOpen(false);
+        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) {
+          setMenuOpen(false);
+        }
       }
     };
     const onKey = (e) => {
-      if (e.key === "Escape") { setMenuOpen(false); setSearchOpen(false); }
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setSearchOpen(false);
+      }
     };
     const onScrollResize = () => {
       if (menuOpen) calcMenuPosition();
@@ -76,20 +80,21 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // Initial mobile search offset
+  // initial mobile search offset
   useEffect(() => {
-    if (headerRef.current) {
-      setSearchTop(headerRef.current.getBoundingClientRect().bottom);
-    }
+    if (!headerRef.current) return;
+    setSearchTop(headerRef.current.getBoundingClientRect().bottom);
   }, []);
 
-  // Lock body scroll when mobile search is open
+  // lock body scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
   }, [searchOpen, mounted]);
 
@@ -108,7 +113,7 @@ export default function Header() {
 
   return (
     <>
-      {/* FULL‑BLEED HEADER (escapes parent containers) */}
+      {/* FULL‑BLEED header: breaks out of any page container/paddings */}
       <header
         ref={headerRef}
         className="
@@ -116,14 +121,14 @@ export default function Header() {
           left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen
         "
       >
-        {/* Inner row. Note: pr uses safe-area so the Categories button can go truly flush-right */}
+        {/* Inner row — explicit right padding = 0 so Categories can hug the edge */}
         <div className="
-          grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 min-h-[64px]
-          pl-[max(env(safe-area-inset-left),1rem)]
-          pr-[max(env(safe-area-inset-right),1rem)]
+          grid grid-cols-[auto_1fr_auto] items-center gap-4
+          pl-4 md:pl-6 pr-0 md:pr-0 min-h-[64px]
         ">
-          {/* Logo + mobile search icon (left) */}
+          {/* Left: mobile search icon + logo */}
           <div className="flex items-center gap-2">
+            {/* Mobile search trigger */}
             <button
               className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-700"
               aria-label="Open search"
@@ -147,15 +152,15 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Search (desktop, centered in middle track) */}
+          {/* Center: Search */}
           <div className="hidden md:flex justify-center min-w-0">
             <div className="w-full max-w-xl min-w-0">
               <SearchBox />
             </div>
           </div>
 
-          {/* Categories (flush to far right) */}
-          <div className="justify-self-end">
+          {/* Right: Categories — visually far‑right */}
+          <div className="justify-self-end mr-[6px] md:mr-[10px]">
             <button
               ref={menuBtnRef}
               onClick={toggleMenu}
@@ -173,7 +178,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Categories dropdown (portal; overlaps everything) */}
+      {/* Categories dropdown (portal, overlaps all) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -198,7 +203,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search sheet */}
+      {/* Mobile search panel (beneath header) */}
       {mounted && searchOpen &&
         createPortal(
           <>
