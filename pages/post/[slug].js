@@ -4,7 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { PortableText } from "@portabletext/react";
 
-// ---------- GROQ ----------
+/**
+ * GROQ: prefer normalized category ref; fallback to legacy categories[0].
+ * Pull all fields we display above-the-fold (hero, meta, excerpt, tools/materials).
+ */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,
@@ -28,10 +31,8 @@ const POST_QUERY = `
   "faq": faq[],
   commonMistakes[],
   safetyTips[],
-  // These can be strings or objects; we will handle both
   "toolsNeeded": toolsNeeded[],
   "materialsNeeded": materialsNeeded[],
-  // Steps may be strings or objects with title/text/image
   "stepByStepInstructions": stepByStepInstructions[]{
     ...,
     title,
@@ -43,7 +44,6 @@ const POST_QUERY = `
     caption,
     asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }
   },
-  // Prefer normalized single ref; gracefully handle legacy categories[0]
   "category": coalesce(
     category->{ _id, title, "slug": slug.current },
     categories[0]->{ _id, title, "slug": slug.current }
@@ -134,7 +134,6 @@ function asString(item) {
   if (!item) return null;
   if (typeof item === "string") return item;
   if (typeof item === "object") {
-    // Common shapes: {name, link} or {text}
     return item.name || item.text || item.title || JSON.stringify(item);
   }
   return String(item);
@@ -144,7 +143,6 @@ function maybeEmbed(videoURL) {
   if (!videoURL) return null;
   const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
   if (isYouTube) {
-    // Normalize to embed
     let id = "";
     const m1 = videoURL.match(/v=([^&]+)/);
     const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
@@ -185,7 +183,7 @@ function estimateReadMinutes(post) {
   if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
   else if (typeof post?.body === "string") text = post.body;
   const words = text ? text.trim().split(/\s+/).length : 0;
-  const mins = Math.max(1, Math.round(words / 200)); // 200 wpm
+  const mins = Math.max(1, Math.round(words / 200));
   return mins;
 }
 
@@ -256,28 +254,14 @@ export default function PostPage({ post }) {
       </Head>
 
       <article className="max-w-3xl mx-auto px-4 py-10">
-        {/* Header */}
-        <header className="mb-6">
+        {/* Title only */}
+        <header className="mb-4">
           <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm opacity-80">
-            {dateText && kv("Published", dateText)}
-            {category?.title && category?.slug && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-wide opacity-60">Category</span>
-                <Link className="underline" href={`/category/${category.slug}`}>
-                  {category.title}
-                </Link>
-              </div>
-            )}
-            {readMins ? pill(`${readMins} min read`) : null}
-            {difficultyLevel ? pill(difficultyLevel) : null}
-            {author?.name ? pill(`By ${author.name}`) : authorAIName ? pill(authorAIName) : null}
-          </div>
         </header>
 
         {/* Hero */}
         {imageUrl ? (
-          <figure className="mb-6">
+          <figure className="mb-3">
             <Image
               src={imageUrl}
               alt={imageAlt}
@@ -291,44 +275,40 @@ export default function PostPage({ post }) {
             )}
           </figure>
         ) : (
-          <div className="mb-8 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
+          <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
             No image provided
           </div>
         )}
 
-        {/* At-a-glance info */}
-        {(estimatedTime || estimatedCost || difficultyLevel) && (
-          <section className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {kv("Estimated Time", estimatedTime)}
-            {kv("Estimated Cost", toCurrency(estimatedCost))}
-            {kv("Skill Level", difficultyLevel)}
-          </section>
-        )}
+        {/* Meta row UNDER the hero (per your request) */}
+        <div className="mt-2 mb-6 flex flex-wrap items-center gap-4 text-sm">
+          {dateText && kv("Published", dateText)}
+          {category?.title && category?.slug && (
+            <div className="flex flex-col">
+              <span className="text-xs uppercase tracking-wide opacity-60">Category</span>
+              <Link className="underline" href={`/category/${category.slug}`}>
+                {category.title}
+              </Link>
+            </div>
+          )}
+          {readMins ? kv("Read Time", `${readMins} min`) : null}
+          {difficultyLevel ? kv("Skill Level", difficultyLevel) : null}
+          {author?.name
+            ? kv("Author", author.name)
+            : authorAIName
+            ? kv("Author", authorAIName)
+            : null}
+        </div>
 
         {/* Excerpt */}
         {typeof excerpt === "string" && excerpt.length > 0 && (
-          <p className="text-lg leading-relaxed mb-8 opacity-90">{excerpt}</p>
+          <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
         )}
 
-        {/* Body */}
-        {isPortable && (
-          <div className="prose lg:prose-lg max-w-none">
-            <PortableText value={body} components={ptComponents} />
-          </div>
-        )}
-        {!isPortable && isString && <StringBody text={body} />}
-
-        {!isPortable && !isString && (
-          <p className="opacity-70">This article hasn’t been populated with content yet.</p>
-        )}
-
-        {/* Video */}
-        {maybeEmbed(videoURL)}
-
-        {/* Tools & Materials */}
+        {/* Tools & Materials moved up near the top */}
         {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
         (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ? (
-          <section className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-8">
+          <section className="mb-10 grid grid-cols-1 sm:grid-cols-2 gap-8">
             {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
               <div>
                 <h2 className="text-2xl font-semibold mb-3">Tools Needed</h2>
@@ -351,6 +331,21 @@ export default function PostPage({ post }) {
             )}
           </section>
         ) : null}
+
+        {/* Body */}
+        {isPortable && (
+          <div className="prose lg:prose-lg max-w-none">
+            <PortableText value={body} components={ptComponents} />
+          </div>
+        )}
+        {!isPortable && isString && <StringBody text={body} />}
+
+        {!isPortable && !isString && (
+          <p className="opacity-70">This article hasn’t been populated with content yet.</p>
+        )}
+
+        {/* Video Embed (optional) */}
+        {maybeEmbed(videoURL)}
 
         {/* Step-by-step */}
         {Array.isArray(stepByStepInstructions) && stepByStepInstructions.length > 0 && (
@@ -409,30 +404,34 @@ export default function PostPage({ post }) {
           </section>
         ) : null}
 
-        {/* FAQ */}
+        {/* FAQ — expanded, no clicking */}
         {Array.isArray(faq) && faq.length > 0 && (
           <section className="mt-10">
             <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
-            <div className="space-y-4">
-              {faq.map((f, i) => {
-                if (typeof f === "string") {
+            {/* If objects with {question, answer} → render Q/A blocks.
+                If simple strings → render a clean list of questions. */}
+            {faq.some((f) => typeof f === "object" && (f?.question || f?.answer)) ? (
+              <div className="space-y-6">
+                {faq.map((f, i) => {
+                  const q =
+                    typeof f === "object" ? f?.question || f?.q || `Question ${i + 1}` : String(f);
+                  const a =
+                    typeof f === "object" ? f?.answer || f?.a || "" : "";
                   return (
-                    <details key={i} className="rounded-lg border p-4">
-                      <summary className="cursor-pointer font-medium">Q{i + 1}</summary>
-                      <p className="mt-2">{f}</p>
-                    </details>
+                    <div key={i} className="rounded-lg border p-4">
+                      <div className="font-medium">{q}</div>
+                      {a ? <p className="mt-2">{a}</p> : null}
+                    </div>
                   );
-                }
-                const q = f?.question || f?.q || `Q${i + 1}`;
-                const a = f?.answer || f?.a || asString(f);
-                return (
-                  <details key={i} className="rounded-lg border p-4">
-                    <summary className="cursor-pointer font-medium">{q}</summary>
-                    {a && <p className="mt-2">{a}</p>}
-                  </details>
-                );
-              })}
-            </div>
+                })}
+              </div>
+            ) : (
+              <ul className="list-disc pl-6 space-y-2">
+                {faq.map((q, i) => (
+                  <li key={i}>{asString(q)}</li>
+                ))}
+              </ul>
+            )}
           </section>
         )}
 
@@ -495,10 +494,7 @@ export default function PostPage({ post }) {
               ← Back to Home
             </Link>
           )}
-          {/* Placeholder for future ShareToolbar integration */}
-          <div id="share-toolbar" className="opacity-60 text-sm">
-            {/* add ShareToolbar later */}
-          </div>
+          <div id="share-toolbar" className="opacity-60 text-sm" />
         </footer>
       </article>
     </>
@@ -508,7 +504,6 @@ export default function PostPage({ post }) {
 // ---------- Data fetching ----------
 export async function getStaticProps({ params }) {
   try {
-    // dynamic import keeps hardcoded token server-only
     const { client } = await import("../../lib/sanity.client");
     const post = await client.fetch(POST_QUERY, { slug: params.slug });
     if (!post) return { notFound: true, revalidate: 60 };
