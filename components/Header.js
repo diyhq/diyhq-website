@@ -10,13 +10,13 @@ const MENU_W = 224; // Tailwind w-56 = 14rem
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories menu
+  // Categories menu (desktop/mobile)
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search
+  // Mobile search panel
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
   const headerRef = useRef(null);
@@ -36,7 +36,7 @@ export default function Header() {
     { title: "Side Hustles", path: "/category/side-hustles" },
   ];
 
-  /* ---------- Categories menu positioning ---------- */
+  /* ---------- Categories menu positioning (portal) ---------- */
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -92,22 +92,20 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  /* ---------- Compute mobile search panel top ---------- */
+  // Compute mobile search panel top offset from header height
   useEffect(() => {
     if (!headerRef.current) return;
     const r = headerRef.current.getBoundingClientRect();
     setSearchTop(r.bottom);
   }, []);
 
-  /* ---------- Prevent body scroll when mobile search is open ---------- */
+  // Lock body scroll when mobile search panel is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
+      return () => { document.body.style.overflow = prev; };
     }
   }, [searchOpen, mounted]);
 
@@ -116,35 +114,10 @@ export default function Header() {
       ref={headerRef}
       className="bg-white border-b shadow-md px-4 py-3 relative"
     >
-      {/* GRID: [left controls] [center logo] [right controls] */}
+      {/* 3-column header: mobile-left search icon | centered logo | right search (desktop) + categories */}
       <div className="grid grid-cols-3 items-center">
-        {/* Left (empty spacer for balance on desktop) */}
-        <div className="col-span-1" />
-
-        {/* Center: Logo */}
-        <div className="col-span-1 flex justify-center">
-          <Link href="/" aria-label="DIY HQ Home">
-            <Image
-              src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
-              alt="DIY HQ Logo"
-              width={160}
-              height={80}
-              priority
-              className="object-contain"
-            />
-          </Link>
-        </div>
-
-        {/* Right: (Desktop) search centered in right third + Categories button */}
-        <div className="col-span-1 flex items-center justify-end gap-3">
-          {/* Desktop search */}
-          <div className="hidden md:flex flex-1 justify-center z-[20]">
-            <div className="w-full max-w-[480px]">
-              <SearchBox />
-            </div>
-          </div>
-
-          {/* Mobile search icon */}
+        {/* Left: MOBILE search icon (far left) */}
+        <div className="col-span-1 flex items-center">
           <button
             className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800 z-[30]"
             aria-label="Open search"
@@ -161,6 +134,30 @@ export default function Header() {
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
           </button>
+        </div>
+
+        {/* Center: Logo (always centered) */}
+        <div className="col-span-1 flex justify-center">
+          <Link href="/" aria-label="DIY HQ Home">
+            <Image
+              src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
+              alt="DIY HQ Logo"
+              width={160}
+              height={80}
+              priority
+              className="object-contain"
+            />
+          </Link>
+        </div>
+
+        {/* Right: DESKTOP search sits between logo & Categories; Categories at far right */}
+        <div className="col-span-1 flex items-center justify-end gap-3">
+          {/* Desktop search (hidden on mobile) */}
+          <div className="hidden md:flex min-w-0 flex-1 justify-end z-[20]">
+            <div className="w-full max-w-[520px]">
+              <SearchBox />
+            </div>
+          </div>
 
           {/* Categories button (all breakpoints) */}
           <button
@@ -186,9 +183,8 @@ export default function Header() {
         </div>
       </div>
 
-      {/* PORTAL: Categories dropdown */}
-      {mounted &&
-        menuOpen &&
+      {/* PORTAL: Categories dropdown (overlaps everything) */}
+      {mounted && menuOpen &&
         createPortal(
           <div
             ref={menuRef}
@@ -212,7 +208,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* PORTAL: Mobile search overlay (full width, below header) */}
+      {/* PORTAL: Mobile full-width search panel BELOW header */}
       {mounted && searchOpen &&
         createPortal(
           <>
