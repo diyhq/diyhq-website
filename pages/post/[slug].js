@@ -152,6 +152,57 @@ function sanitizePortableText(blocks) {
   });
 }
 
+function blockText(b) {
+  if (!b) return "";
+  if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
+  return "";
+}
+
+/**
+ * Strip the "Recommended Gear / Editor's Picks" section if there are NO affiliateLinks.
+ * Heuristics:
+ *  - Remove heading that mentions "recommended gear" or "editor's picks"
+ *  - Remove follow-on paragraphs like "See our pick …" / "view on Amazon" / "affiliate code"
+ *  - Remove "Disclosure: As an Amazon Associate …" lines
+ * Stops removing when the next heading appears.
+ */
+function stripRecommended(blocks, affiliateLinks) {
+  if (!Array.isArray(blocks)) return blocks;
+  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
+
+  let skipping = false;
+  return blocks.filter((b) => {
+    const isHeading =
+      b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
+    const text = blockText(b).toLowerCase();
+
+    // start skipping at heading
+    if (isHeading) {
+      if (
+        /recommended\s+gear/.test(text) ||
+        /editor'?s?\s+picks/.test(text) ||
+        /recommended\s+picks/.test(text)
+      ) {
+        skipping = true;
+        return false; // drop this heading
+      }
+      // If we were skipping, a new heading ends the skip and we KEEP this heading.
+      if (skipping) skipping = false;
+      return true;
+    }
+
+    if (skipping) return false; // drop everything in that section
+
+    // drop individual "pick" lines even if there was no heading
+    if (/^see our pick/i.test(text)) return false;
+    if (/view on amazon/i.test(text)) return false;
+    if (/affiliate code/i.test(text)) return false;
+    if (/^disclosure:.*amazon associate/i.test(text)) return false;
+
+    return true;
+  });
+}
+
 function StringBody({ text }) {
   const cleaned = sanitizePlainText(text);
   const paragraphs = cleaned
@@ -631,6 +682,11 @@ export async function getStaticProps({ params }) {
             }
           : sanitizePlainText(asString(f))
       );
+    }
+
+    // NEW: strip "Recommended Gear" body section if there are no affiliate links
+    if (Array.isArray(post.body)) {
+      post.body = stripRecommended(post.body, post.affiliateLinks);
     }
 
     // Prev/Next only if we have a category
