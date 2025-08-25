@@ -10,7 +10,7 @@ const MENU_W = 224; // Tailwind w-56 = 14rem
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories menu (desktop/mobile)
+  // Categories menu
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
@@ -57,7 +57,7 @@ export default function Header() {
     });
   };
 
-  /* ---------- Global listeners for menu + search ---------- */
+  /* ---------- Global listeners ---------- */
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
@@ -92,14 +92,14 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // Compute mobile search panel top offset from header height
+  // Compute mobile search panel offset
   useEffect(() => {
     if (!headerRef.current) return;
     const r = headerRef.current.getBoundingClientRect();
     setSearchTop(r.bottom);
   }, []);
 
-  // Lock body scroll when mobile search panel is open
+  // Lock body scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
@@ -112,54 +112,49 @@ export default function Header() {
   return (
     <header
       ref={headerRef}
-      className="bg-white border-b shadow-md px-4 py-3 relative"
+      className="relative bg-white border-b shadow-md px-4 py-3"
     >
-      {/* 3-column header: mobile-left search icon | centered logo | right search (desktop) + categories */}
-      <div className="grid grid-cols-3 items-center">
-        {/* Left: MOBILE search icon (far left) */}
-        <div className="col-span-1 flex items-center">
-          <button
-            className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800 z-[30]"
-            aria-label="Open search"
-            onClick={() => setSearchOpen(true)}
-          >
-            <svg
-              className="h-6 w-6"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="7"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-          </button>
-        </div>
+      {/* Absolute-centered LOGO (independent of left/right controls) */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[25]">
+        <Link href="/" aria-label="DIY HQ Home" className="pointer-events-auto block">
+          <Image
+            src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
+            alt="DIY HQ Logo"
+            width={160}
+            height={80}
+            priority
+            className="object-contain"
+          />
+        </Link>
+      </div>
 
-        {/* Center: Logo (always centered) */}
-        <div className="col-span-1 flex justify-center">
-          <Link href="/" aria-label="DIY HQ Home">
-            <Image
-              src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
-              alt="DIY HQ Logo"
-              width={160}
-              height={80}
-              priority
-              className="object-contain"
-            />
-          </Link>
-        </div>
+      {/* Controls row */}
+      <div className="flex items-center">
+        {/* MOBILE: search icon on far left (hidden on desktop) */}
+        <button
+          className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800 z-[30]"
+          aria-label="Open search"
+          onClick={() => setSearchOpen(true)}
+        >
+          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
 
-        {/* Right: DESKTOP search sits between logo & Categories; Categories at far right */}
-        <div className="col-span-1 flex items-center justify-end gap-3">
-          {/* Desktop search (hidden on mobile) */}
-          <div className="hidden md:flex min-w-0 flex-1 justify-end z-[20]">
+        {/* Spacer: ensures nothing visible on the left on desktop */}
+        <div className="flex-1" />
+
+        {/* RIGHT controls (desktop search in between logo & categories, categories at far right) */}
+        <div className="flex items-center gap-3">
+          {/* Desktop search (between logo and Categories) */}
+          <div className="hidden md:block min-w-0">
             <div className="w-full max-w-[520px]">
               <SearchBox />
             </div>
           </div>
 
-          {/* Categories button (all breakpoints) */}
+          {/* Categories button (far right) */}
           <button
             ref={menuBtnRef}
             onClick={toggleMenu}
@@ -168,14 +163,7 @@ export default function Header() {
             aria-expanded={menuOpen}
             aria-controls="site-categories-menu"
           >
-            <svg
-              className="h-7 w-7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
+            <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
             <span>Categories</span>
@@ -183,7 +171,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* PORTAL: Categories dropdown (overlaps everything) */}
+      {/* PORTAL: Categories dropdown (always on top, overlaps everything) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -212,16 +200,8 @@ export default function Header() {
       {mounted && searchOpen &&
         createPortal(
           <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black/30 z-[90]"
-              onClick={() => setSearchOpen(false)}
-            />
-            {/* Panel */}
-            <div
-              className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3"
-              style={{ top: `${searchTop}px` }}
-            >
+            <div className="fixed inset-0 bg-black/30 z-[90]" onClick={() => setSearchOpen(false)} />
+            <div className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3" style={{ top: `${searchTop}px` }}>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <SearchBox />
@@ -231,13 +211,7 @@ export default function Header() {
                   className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100"
                   onClick={() => setSearchOpen(false)}
                 >
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
