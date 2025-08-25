@@ -1,15 +1,13 @@
 // pages/api/debug-post.js
-// Local test:  http://localhost:3000/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
-// Prod test:   https://www.doityourselfhq.com/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
+// Local: http://localhost:3000/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
+// Prod:  https://www.doityourselfhq.com/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
 
-import { client } from "../../sanity/lib/client";
+import { client } from "../../lib/sanity.client";
 
 export default async function handler(req, res) {
   try {
     const { slug } = req.query;
-    if (!slug) {
-      return res.status(400).json({ ok: false, error: "Missing ?slug" });
-    }
+    if (!slug) return res.status(400).json({ ok: false, error: "Missing ?slug" });
 
     const query = `
       *[_type == "post" && slug.current == $slug][0]{
@@ -24,7 +22,6 @@ export default async function handler(req, res) {
           alt,
           asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }
         },
-        // Support either single ref 'category' or array 'categories'
         "category": coalesce(
           category->{
             _id, title, "slug": slug.current

@@ -3,7 +3,6 @@ import Head from "next/head";
 import Image from "next/image";
 import Link from "next/link";
 import { PortableText } from "@portabletext/react";
-import { client } from "../../sanity/lib/client";
 
 // ---------- GROQ ----------
 const POST_QUERY = `
@@ -148,14 +147,13 @@ export default function PostPage({ post }) {
 // ---------- Data fetching ----------
 export async function getStaticProps({ params }) {
   try {
+    // Dynamic import to keep token out of the client bundle
+    const { client } = await import("../../lib/sanity.client");
     const post = await client.fetch(POST_QUERY, { slug: params.slug });
     if (!post) {
       return { notFound: true, revalidate: 60 };
     }
-    return {
-      props: { post },
-      revalidate: 60,
-    };
+    return { props: { post }, revalidate: 60 };
   } catch {
     return { notFound: true, revalidate: 60 };
   }
@@ -163,6 +161,8 @@ export async function getStaticProps({ params }) {
 
 export async function getStaticPaths() {
   try {
+    // Dynamic import to keep token out of the client bundle
+    const { client } = await import("../../lib/sanity.client");
     const slugs = await client.fetch(SLUGS_QUERY);
     return {
       paths: (slugs || []).map((s) => ({ params: { slug: s } })),
