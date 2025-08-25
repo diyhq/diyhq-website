@@ -6,7 +6,7 @@ import { PortableText } from "@portabletext/react";
 
 /**
  * GROQ: prefer normalized category ref; fallback to legacy categories[0].
- * Pull all fields we display above-the-fold (hero, meta, excerpt, tools/materials).
+ * Pull fields we need for hero, meta, excerpt, tools/materials and the rest.
  */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
@@ -106,28 +106,21 @@ function StringBody({ text }) {
   );
 }
 
-function pill(text) {
-  return (
-    <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium">
-      {text}
-    </span>
-  );
-}
-
 function kv(label, value) {
   if (!value) return null;
   return (
-    <div className="flex flex-col">
-      <span className="text-xs uppercase tracking-wide opacity-60">{label}</span>
-      <span className="font-medium">{value}</span>
+    <div className="flex flex-col min-w-[8rem]">
+      <span className="text-[10px] uppercase tracking-wide opacity-60">{label}</span>
+      <span className="text-sm font-medium">{value}</span>
     </div>
   );
 }
 
 function toCurrency(val) {
+  if (val == null) return null;
   if (typeof val === "number") return `$${val.toLocaleString()}`;
   if (typeof val === "string") return val;
-  return null;
+  return String(val);
 }
 
 function asString(item) {
@@ -240,6 +233,20 @@ export default function PostPage({ post }) {
 
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
   const readMins = estimateReadMinutes(post);
+  const costText = toCurrency(estimatedCost);
+
+  // --- JSON-LD (helps Google understand the article) ---
+  const articleLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: displayTitle,
+    image: imageUrl ? [imageUrl] : undefined,
+    datePublished: publishedAt || undefined,
+    articleSection: category?.title || undefined,
+    author: [{ "@type": "Person", name: author?.name || authorAIName || "DIY HQ Team" }],
+    keywords: Array.isArray(projectTags) ? projectTags.map(asString).join(", ") : undefined,
+    description: metaDesc,
+  };
 
   return (
     <>
@@ -251,17 +258,23 @@ export default function PostPage({ post }) {
         {metaDesc && <meta property="og:description" content={metaDesc} />}
         <meta property="og:type" content="article" />
         {publishedAt && <meta property="article:published_time" content={publishedAt} />}
+
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
+        />
       </Head>
 
       <article className="max-w-3xl mx-auto px-4 py-10">
-        {/* Title only */}
-        <header className="mb-4">
+        {/* Title — no card/box styling */}
+        <header className="mb-4 bg-transparent p-0 border-0 shadow-none">
           <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
         </header>
 
         {/* Hero */}
         {imageUrl ? (
-          <figure className="mb-3">
+          <figure className="mb-2">
             <Image
               src={imageUrl}
               alt={imageAlt}
@@ -270,6 +283,7 @@ export default function PostPage({ post }) {
               className="w-full h-auto rounded-xl"
               priority
             />
+            {/* Caption or Alt displayed for SEO clarity */}
             {caption && (
               <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
             )}
@@ -280,39 +294,38 @@ export default function PostPage({ post }) {
           </div>
         )}
 
-        {/* Meta row UNDER the hero (per your request) */}
-        <div className="mt-2 mb-6 flex flex-wrap items-center gap-4 text-sm">
-          {dateText && kv("Published", dateText)}
-          {category?.title && category?.slug && (
-            <div className="flex flex-col">
-              <span className="text-xs uppercase tracking-wide opacity-60">Category</span>
-              <Link className="underline" href={`/category/${category.slug}`}>
-                {category.title}
-              </Link>
-            </div>
-          )}
-          {readMins ? kv("Read Time", `${readMins} min`) : null}
-          {difficultyLevel ? kv("Skill Level", difficultyLevel) : null}
-          {author?.name
-            ? kv("Author", author.name)
-            : authorAIName
-            ? kv("Author", authorAIName)
-            : null}
-        </div>
+        {/* Meta row UNDER the hero, with your order inside a subtle grey box */}
+        <section className="mt-3 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+            {kv("Author", author?.name || authorAIName)}
+            {kv("Skill Level", difficultyLevel)}
+            {kv("Read Time", readMins ? `${readMins} min` : null)}
+            {kv("Estimated Cost", costText)}
+            {kv(
+              "Category",
+              category?.title && category?.slug ? (
+                <Link className="underline" href={`/category/${category.slug}`}>
+                  {category.title}
+                </Link>
+              ) : null
+            )}
+            {kv("Published", dateText)}
+          </div>
+        </section>
 
         {/* Excerpt */}
         {typeof excerpt === "string" && excerpt.length > 0 && (
           <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
         )}
 
-        {/* Tools & Materials moved up near the top */}
+        {/* Tools & Materials — smaller text, dense lists, near the top */}
         {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
         (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ? (
           <section className="mb-10 grid grid-cols-1 sm:grid-cols-2 gap-8">
             {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
               <div>
-                <h2 className="text-2xl font-semibold mb-3">Tools Needed</h2>
-                <ul className="list-disc pl-6 space-y-2">
+                <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
+                <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
                   {toolsNeeded.map((t, i) => (
                     <li key={i}>{asString(t)}</li>
                   ))}
@@ -321,8 +334,8 @@ export default function PostPage({ post }) {
             )}
             {Array.isArray(materialsNeeded) && materialsNeeded.length > 0 && (
               <div>
-                <h2 className="text-2xl font-semibold mb-3">Materials Needed</h2>
-                <ul className="list-disc pl-6 space-y-2">
+                <h2 className="text-xl font-semibold mb-2">Materials Needed</h2>
+                <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
                   {materialsNeeded.map((m, i) => (
                     <li key={i}>{asString(m)}</li>
                   ))}
@@ -333,18 +346,17 @@ export default function PostPage({ post }) {
         ) : null}
 
         {/* Body */}
-        {isPortable && (
+        {Array.isArray(body) ? (
           <div className="prose lg:prose-lg max-w-none">
             <PortableText value={body} components={ptComponents} />
           </div>
-        )}
-        {!isPortable && isString && <StringBody text={body} />}
-
-        {!isPortable && !isString && (
+        ) : typeof body === "string" && body.trim().length > 0 ? (
+          <StringBody text={body} />
+        ) : (
           <p className="opacity-70">This article hasn’t been populated with content yet.</p>
         )}
 
-        {/* Video Embed (optional) */}
+        {/* Video (optional) */}
         {maybeEmbed(videoURL)}
 
         {/* Step-by-step */}
@@ -408,15 +420,12 @@ export default function PostPage({ post }) {
         {Array.isArray(faq) && faq.length > 0 && (
           <section className="mt-10">
             <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
-            {/* If objects with {question, answer} → render Q/A blocks.
-                If simple strings → render a clean list of questions. */}
             {faq.some((f) => typeof f === "object" && (f?.question || f?.answer)) ? (
               <div className="space-y-6">
                 {faq.map((f, i) => {
                   const q =
                     typeof f === "object" ? f?.question || f?.q || `Question ${i + 1}` : String(f);
-                  const a =
-                    typeof f === "object" ? f?.answer || f?.a || "" : "";
+                  const a = typeof f === "object" ? f?.answer || f?.a || "" : "";
                   return (
                     <div key={i} className="rounded-lg border p-4">
                       <div className="font-medium">{q}</div>
