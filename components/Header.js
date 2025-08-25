@@ -5,18 +5,15 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // Tailwind w-56 (14rem)
+const MENU_W = 224; // Tailwind w-56
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
-
-  // Categories (right) menu state
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search panel state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
@@ -24,7 +21,6 @@ export default function Header() {
 
   useEffect(() => setMounted(true), []);
 
-  // ---- Position Categories portal
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -36,6 +32,7 @@ export default function Header() {
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
+
   const toggleMenu = () => {
     setMenuOpen((v) => {
       const next = !v;
@@ -44,15 +41,16 @@ export default function Header() {
     });
   };
 
-  // ---- Global listeners
   useEffect(() => {
     const onDocClick = (e) => {
-      const menuEl = menuRef.current;
-      const btnEl = menuBtnRef.current;
-      if (menuOpen && menuEl && btnEl) {
-        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) {
-          setMenuOpen(false);
-        }
+      if (
+        menuOpen &&
+        menuRef.current &&
+        menuBtnRef.current &&
+        !menuRef.current.contains(e.target) &&
+        !menuBtnRef.current.contains(e.target)
+      ) {
+        setMenuOpen(false);
       }
     };
     const onKey = (e) => {
@@ -64,11 +62,9 @@ export default function Header() {
     const onScrollResize = () => {
       if (menuOpen) calcMenuPosition();
       if (headerRef.current) {
-        const r = headerRef.current.getBoundingClientRect();
-        setSearchTop(r.bottom);
+        setSearchTop(headerRef.current.getBoundingClientRect().bottom);
       }
     };
-
     document.addEventListener("mousedown", onDocClick);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScrollResize, { passive: true });
@@ -81,19 +77,19 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // initial mobile search offset
   useEffect(() => {
     if (!headerRef.current) return;
     setSearchTop(headerRef.current.getBoundingClientRect().bottom);
   }, []);
 
-  // lock body scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
   }, [searchOpen, mounted]);
 
@@ -115,63 +111,75 @@ export default function Header() {
       ref={headerRef}
       className="relative z-40 bg-white border-b shadow-md px-4 md:px-6 py-3"
     >
-      {/* One responsive bar. Desktop grid: 1fr | auto | 1fr (center column hugs the logo, truly centered). */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
-        {/* Left column: mobile search icon */}
-        <div className="justify-self-start">
+      {/* GRID: left logo | center search | right categories */}
+      <div className="grid grid-cols-3 items-center w-full">
+        {/* Left: logo (desktop), search icon (mobile) */}
+        <div className="flex items-center justify-start">
           <button
-            className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800"
+            className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800 mr-2"
             aria-label="Open search"
             onClick={() => setSearchOpen(true)}
           >
-            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              className="h-6 w-6"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="11" cy="11" r="7"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
           </button>
-        </div>
-
-        {/* Center column: Logo (auto width => perfectly centered) */}
-        <div className="justify-self-center">
-          <Link href="/" aria-label="DIY HQ Home" className="block">
+          <Link href="/" aria-label="DIY HQ Home" className="hidden md:block">
             <Image
               src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
               alt="DIY HQ Logo"
-              width={180}
-              height={90}
+              width={160}
+              height={80}
               priority
               className="object-contain"
             />
           </Link>
         </div>
 
-        {/* Right column (FULL WIDTH): Search centered in left track, Categories flush-right */}
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 w-full justify-self-stretch min-w-0">
-          {/* Desktop search occupies left track and is centered within that track */}
-          <div className="hidden md:flex w-full justify-center min-w-0">
-            <div className="w-full max-w-xl min-w-0">
-              <SearchBox />
-            </div>
+        {/* Center: search (desktop) */}
+        <div className="hidden md:flex justify-center">
+          <div className="w-full max-w-xl">
+            <SearchBox />
           </div>
+        </div>
 
-          {/* Categories pinned to the inside of the right edge */}
+        {/* Right: categories */}
+        <div className="flex justify-end">
           <button
             ref={menuBtnRef}
             onClick={toggleMenu}
-            className="justify-self-end flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
+            className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-controls="site-categories-menu"
           >
-            <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             </svg>
             <span>Categories</span>
           </button>
         </div>
       </div>
 
-      {/* Categories dropdown (portal, overlaps all) */}
+      {/* Categories dropdown */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -196,12 +204,18 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel (beneath header) */}
+      {/* Mobile search panel */}
       {mounted && searchOpen &&
         createPortal(
           <>
-            <div className="fixed inset-0 bg-black/30 z-[90]" onClick={() => setSearchOpen(false)} />
-            <div className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3" style={{ top: `${searchTop}px` }}>
+            <div
+              className="fixed inset-0 bg-black/30 z-[90]"
+              onClick={() => setSearchOpen(false)}
+            />
+            <div
+              className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3"
+              style={{ top: `${searchTop}px` }}
+            >
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <SearchBox />
@@ -211,7 +225,13 @@ export default function Header() {
                   className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100"
                   onClick={() => setSearchOpen(false)}
                 >
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    className="h-5 w-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
