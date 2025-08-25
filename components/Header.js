@@ -10,20 +10,20 @@ const MENU_W = 224; // Tailwind w-56 (14rem)
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories (right) menu state
+  // Categories menu
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search panel state
+  // Mobile search
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
   const headerRef = useRef(null);
   useEffect(() => setMounted(true), []);
 
-  // ---- Position Categories portal
+  // Position the dropdown next to the button
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -43,7 +43,7 @@ export default function Header() {
     });
   };
 
-  // ---- Global listeners
+  // Global listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
@@ -80,21 +80,20 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // initial mobile search offset
+  // initial offset for the mobile search sheet
   useEffect(() => {
-    if (!headerRef.current) return;
-    setSearchTop(headerRef.current.getBoundingClientRect().bottom);
+    if (headerRef.current) {
+      setSearchTop(headerRef.current.getBoundingClientRect().bottom);
+    }
   }, []);
 
-  // lock body scroll when mobile search is open
+  // lock scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
+      return () => { document.body.style.overflow = prev; };
     }
   }, [searchOpen, mounted]);
 
@@ -113,22 +112,17 @@ export default function Header() {
 
   return (
     <>
-      {/* FULL‑BLEED header: breaks out of any page container/paddings */}
+      {/* FIXED & FULL-BLEED HEADER */}
       <header
         ref={headerRef}
         className="
-          relative z-50 border-b bg-white/90 backdrop-blur
-          left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen
+          fixed top-0 inset-x-0 z-50 border-b bg-white/90 backdrop-blur
         "
       >
-        {/* Inner row — explicit right padding = 0 so Categories can hug the edge */}
-        <div className="
-          grid grid-cols-[auto_1fr_auto] items-center gap-4
-          pl-4 md:pl-6 pr-0 md:pr-0 min-h-[64px]
-        ">
-          {/* Left: mobile search icon + logo */}
+        {/* Inner row (three columns). Right padding is tiny so Categories hugs the right edge. */}
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 pl-3 pr-2 sm:pl-4 sm:pr-3 md:pl-6 md:pr-4 min-h-[64px]">
+          {/* Left: Logo + (mobile) search icon */}
           <div className="flex items-center gap-2">
-            {/* Mobile search trigger */}
             <button
               className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-700"
               aria-label="Open search"
@@ -152,15 +146,15 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Center: Search */}
+          {/* Center: Search (desktop only) */}
           <div className="hidden md:flex justify-center min-w-0">
             <div className="w-full max-w-xl min-w-0">
               <SearchBox />
             </div>
           </div>
 
-          {/* Right: Categories — visually far‑right */}
-          <div className="justify-self-end mr-[6px] md:mr-[10px]">
+          {/* Right: Categories (hard-right) */}
+          <div className="justify-self-end">
             <button
               ref={menuBtnRef}
               onClick={toggleMenu}
@@ -178,7 +172,10 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Categories dropdown (portal, overlaps all) */}
+      {/* Spacer so content doesn’t sit under fixed header */}
+      <div aria-hidden="true" className="h-[66px] md:h-[68px]" />
+
+      {/* Categories dropdown (portal; overlaps everything) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -203,7 +200,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel (beneath header) */}
+      {/* Mobile search panel (slides under header) */}
       {mounted && searchOpen &&
         createPortal(
           <>

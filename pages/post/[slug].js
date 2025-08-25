@@ -9,17 +9,22 @@ import SocialShareBar from "../../components/SocialShareBar.jsx";
 import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
-// TODO: replace with your real AdSense slot IDs when ready
-const LEFT_SLOT  = "XXXXXXXXXX";
-const RIGHT_SLOT = "YYYYYYYYYY";
-const INART_SLOT = "ZZZZZZZZZZ";
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// TODO: Replace these with your real AdSense slot IDs once approved
+const LEFT_SLOT  = "XXXXXXXXXX";   // Display (left sidebar)
+const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
+const INART_SLOT = "ZZZZZZZZZZ";   // In-article
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-/* ---------------- GROQ ---------------- */
+/**
+ * Pull everything we use; prefer normalized category ref with legacy fallback.
+ */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
   estimatedTime,estimatedCost,readTime,difficultyLevel,authorAIName,commentsEnabled,updateLog,
   featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[],
+
   commonMistakes[],safetyTips[],"toolsNeeded": toolsNeeded[],"materialsNeeded": materialsNeeded[],
   "stepByStepInstructions": stepByStepInstructions[]{...,title,text,image{asset->{url}, alt}},
   mainImage{alt,caption,asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }},
@@ -32,6 +37,7 @@ const POST_QUERY = `
 
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
 
+/** Prev/Next in same category by publishedAt (fallback _createdAt), including UI meta. */
 const NAV_QUERY = `
 {
   "prev": *[
@@ -96,6 +102,7 @@ function sanitizePlainText(text) {
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
+
 function sanitizePortableText(blocks) {
   if (!Array.isArray(blocks)) return blocks;
   return blocks.map((b) => {
@@ -111,16 +118,22 @@ function sanitizePortableText(blocks) {
     return b;
   });
 }
+
 function blockText(b) {
   if (!b) return "";
   if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
   return "";
 }
 
-/** Remove "Recommended Gear" if no affiliate links */
+/**
+ * Remove "Recommended Gear / Editor's Picks" placeholders & redundant disclosures.
+ * If affiliateLinks exist => always remove that entire section so you don’t get duplicates.
+ */
 function stripRecommended(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
-  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
+
+  // If you have affiliate links, we ALWAYS remove placeholder "recommended picks" + disclosure lines.
+  const haveAff = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
 
   let skipping = false;
   return blocks.filter((b) => {
@@ -128,20 +141,27 @@ function stripRecommended(blocks, affiliateLinks) {
       b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
     const text = blockText(b).toLowerCase();
 
-    if (isHeading) {
-      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
-        skipping = true;
-        return false;
-      }
-      if (skipping) skipping = false;
+    // strip common “compare options” empty stubs
+    if (/^compare options.+/.test(text)) return false;
+
+    // strip redundant amazon disclosures in the body (we’ll render one clean disclosure ourselves)
+    if (/^disclosure:\s*as an amazon associate/i.test(text)) return false;
+
+    // begin removing “Recommended Gear / Editor’s Picks” section
+    if (isHeading && (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text))) {
+      skipping = true;
+      return false;
+    }
+    // end skipping when we hit the next heading
+    if (isHeading && skipping) {
+      skipping = false;
       return true;
     }
-
     if (skipping) return false;
+
+    // If you DON'T have affiliate links but body includes the “see our pick…” generic lines,
+    // you can still strip those empty stubs:
     if (/^see our pick/i.test(text)) return false;
-    if (/view on amazon/i.test(text)) return false;
-    if (/affiliate code/i.test(text)) return false;
-    if (/^disclosure:.*amazon associate/i.test(text)) return false;
 
     return true;
   });
@@ -271,12 +291,12 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- Inline in-article ad after the 3rd block ---------- */
+/* ---------- Inline ad after 3rd block ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
   const i = Math.min(Math.max(index, 1), out.length);
-  out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
+  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
   return out;
 }
 
@@ -289,7 +309,7 @@ const ptComponentsWithAd = {
           slot={INART_SLOT}
           layout="in-article"
           format="fluid"
-          style={{ display: "block", textAlign: "center" }}
+          style={{ display: 'block', textAlign: 'center' }}
         />
       </div>
     ),
@@ -350,6 +370,8 @@ export default function PostPage({ post, nav }) {
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
+  const haveAffiliate = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
+
   return (
     <>
       <Head>
@@ -380,7 +402,7 @@ export default function PostPage({ post, nav }) {
               <AdSlot
                 slot={LEFT_SLOT}
                 format="auto"
-                style={{ display: "block", width: 250, minHeight: 250 }}
+                style={{ display: 'block', width: 250, minHeight: 250 }}
               />
             </div>
           </aside>
@@ -388,32 +410,32 @@ export default function PostPage({ post, nav }) {
           {/* MAIN CONTENT */}
           <main>
             <article className="mx-auto py-10">
-              {/* Title (no box/shadow) */}
-              <header className="mb-4">
-                <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
+              {/* Title (no card look) */}
+              <header className="mb-3">
+                <h1 className="text-3xl font-bold leading-tight tracking-tight">{displayTitle}</h1>
               </header>
 
-              {/* Hero (with subtle shadow) */}
+              {/* Hero with soft shadow */}
               {imageUrl ? (
-                <figure className="mb-2">
+                <figure className="mb-3 rounded-xl overflow-hidden shadow-md">
                   <Image
                     src={imageUrl}
                     alt={imageAlt}
                     width={1200}
                     height={630}
-                    className="w-full h-auto rounded-xl shadow-lg"
+                    className="w-full h-auto"
                     priority
                   />
                   {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
                 </figure>
               ) : (
-                <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
+                <div className="mb-3 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
                   No image provided
                 </div>
               )}
 
-              {/* Meta row under hero (with grey box) */}
-              <section className="mt-3 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
+              {/* Meta row under hero (light gray box) */}
+              <section className="mt-2 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
                   {kv("Author", author?.name || authorAIName)}
                   {kv("Skill Level", difficultyLevel)}
@@ -473,15 +495,48 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Body with inline in-article ad after the 3rd block */}
+              {/* Body: strip placeholder “Recommended Gear/Editor’s Picks” if affiliateLinks exist */}
               {Array.isArray(body) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
+                  <PortableText
+                    value={insertInlineAd(stripRecommended(body, affiliateLinks), 3)}
+                    components={ptComponentsWithAd}
+                  />
                 </div>
               ) : typeof body === "string" && body.trim().length > 0 ? (
                 <StringBody text={body} />
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
+              )}
+
+              {/* Manual Amazon links from Sanity (Recommended Gear) */}
+              {haveAffiliate && (
+                <section className="mt-10">
+                  <h2 className="text-2xl font-semibold mb-4">Recommended Gear</h2>
+                  <ul className="space-y-3">
+                    {affiliateLinks.map((it, i) => {
+                      const label = asString(it?.title || it?.label || it?.name || it);
+                      const href  = typeof it === "object" ? it?.url || it?.href || "" : "";
+                      if (!href || !label) return null;
+                      return (
+                        <li key={i} className="flex items-center gap-3">
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener sponsored nofollow"
+                            className="inline-flex items-center rounded border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+                          >
+                            View on Amazon
+                          </a>
+                          <span className="text-sm">{label}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="mt-3 text-xs opacity-70">
+                    Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra cost to you.
+                  </p>
+                </section>
               )}
 
               {/* Video */}
@@ -548,7 +603,7 @@ export default function PostPage({ post, nav }) {
 
               {/* Prev / Next */}
               {(nav?.prev || nav?.next) && (
-                <section className="mt-12 border-t pt-8">
+                <section className="mt-12 border-top pt-8">
                   <h2 className="text-xl font-semibold mb-4">
                     More in {category?.title || "DIY HQ"}
                   </h2>
@@ -595,7 +650,7 @@ export default function PostPage({ post, nav }) {
               <AdSlot
                 slot={RIGHT_SLOT}
                 format="auto"
-                style={{ display: "block", width: 250, minHeight: 250 }}
+                style={{ display: 'block', width: 250, minHeight: 250 }}
               />
             </div>
           </aside>
@@ -633,7 +688,7 @@ export async function getStaticProps({ params }) {
       );
     }
 
-    // strip "Recommended Gear" section when no affiliate links
+    // remove placeholder “Recommended Gear” section when affiliate links exist
     if (Array.isArray(post.body)) post.body = stripRecommended(post.body, post.affiliateLinks);
 
     let nav = { prev: null, next: null };
