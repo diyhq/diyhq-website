@@ -10,33 +10,21 @@ const MENU_W = 224; // Tailwind w-56 = 14rem
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories menu
+  // Categories menu state
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search panel
+  // Mobile search state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
+
   const headerRef = useRef(null);
 
   useEffect(() => setMounted(true), []);
 
-  const categories = [
-    { title: "Home Repair", path: "/category/home-repair" },
-    { title: "Tools & Gear", path: "/category/tools-gear" },
-    { title: "Renovation", path: "/category/renovation" },
-    { title: "Yard & Garden", path: "/category/yard-garden" },
-    { title: "Smart Home", path: "/category/smart-home" },
-    { title: "Beginner Guides", path: "/category/beginner-guides" },
-    { title: "Automotive", path: "/category/automotive" },
-    { title: "Cleaning", path: "/category/cleaning" },
-    { title: "Organization", path: "/category/organization" },
-    { title: "Side Hustles", path: "/category/side-hustles" },
-  ];
-
-  /* ---------- Categories menu positioning (portal) ---------- */
+  /* ---------- Position the categories menu (portal) ---------- */
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -63,7 +51,9 @@ export default function Header() {
       const menuEl = menuRef.current;
       const btnEl = menuBtnRef.current;
       if (menuOpen && menuEl && btnEl) {
-        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) setMenuOpen(false);
+        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) {
+          setMenuOpen(false);
+        }
       }
     };
     const onKey = (e) => {
@@ -92,7 +82,7 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // Compute mobile search panel offset
+  // Compute mobile search panel offset when header mounts/changes size
   useEffect(() => {
     if (!headerRef.current) return;
     const r = headerRef.current.getBoundingClientRect();
@@ -112,27 +102,13 @@ export default function Header() {
   return (
     <header
       ref={headerRef}
-      className="relative bg-white border-b shadow-md px-4 py-3"
+      className="relative z-40 bg-white border-b shadow-md px-4 md:px-6 py-3"
     >
-      {/* Absolute-centered LOGO (independent of left/right controls) */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[25]">
-        <Link href="/" aria-label="DIY HQ Home" className="pointer-events-auto block">
-          <Image
-            src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
-            alt="DIY HQ Logo"
-            width={160}
-            height={80}
-            priority
-            className="object-contain"
-          />
-        </Link>
-      </div>
-
-      {/* Controls row */}
-      <div className="flex items-center">
-        {/* MOBILE: search icon on far left (hidden on desktop) */}
+      {/* ===================== MOBILE BAR ===================== */}
+      <div className="flex items-center justify-between md:hidden">
+        {/* Left: mobile search icon */}
         <button
-          className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800 z-[30]"
+          className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800"
           aria-label="Open search"
           onClick={() => setSearchOpen(true)}
         >
@@ -142,23 +118,66 @@ export default function Header() {
           </svg>
         </button>
 
-        {/* Spacer: ensures nothing visible on the left on desktop */}
-        <div className="flex-1" />
+        {/* Center: logo */}
+        <Link href="/" aria-label="DIY HQ Home" className="block">
+          <Image
+            src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
+            alt="DIY HQ Logo"
+            width={160}
+            height={80}
+            priority
+            className="object-contain"
+          />
+        </Link>
 
-        {/* RIGHT controls (desktop search in between logo & categories, categories at far right) */}
-        <div className="flex items-center gap-3">
-          {/* Desktop search (between logo and Categories) */}
+        {/* Right: categories (hamburger) */}
+        <button
+          ref={menuBtnRef}
+          onClick={toggleMenu}
+          className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-controls="site-categories-menu"
+        >
+          <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <span>Categories</span>
+        </button>
+      </div>
+
+      {/* ===================== DESKTOP BAR ===================== */}
+      <div className="hidden md:grid grid-cols-[1fr_auto_1fr] items-center">
+        {/* Left column: intentionally empty */}
+        <div />
+
+        {/* Center column: perfectly centered logo */}
+        <div className="justify-self-center">
+          <Link href="/" aria-label="DIY HQ Home" className="block">
+            <Image
+              src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
+              alt="DIY HQ Logo"
+              width={180}
+              height={90}
+              priority
+              className="object-contain"
+            />
+          </Link>
+        </div>
+
+        {/* Right column: search then categories (far right) */}
+        <div className="justify-self-end flex items-center gap-3 min-w-0">
           <div className="hidden md:block min-w-0">
+            {/* Constrain desktop search width so it sits nicely between logo and Categories */}
             <div className="w-full max-w-[520px]">
               <SearchBox />
             </div>
           </div>
 
-          {/* Categories button (far right) */}
           <button
             ref={menuBtnRef}
             onClick={toggleMenu}
-            className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg z-[30]"
+            className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-controls="site-categories-menu"
@@ -171,7 +190,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* PORTAL: Categories dropdown (always on top, overlaps everything) */}
+      {/* ============ PORTALS: menu & mobile search ============ */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -181,7 +200,18 @@ export default function Header() {
             className="fixed z-[100] w-56 bg-white border shadow-lg rounded-md py-2 max-h-[75vh] overflow-y-auto"
             style={{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }}
           >
-            {categories.map((cat) => (
+            {[
+              { title: "Home Repair", path: "/category/home-repair" },
+              { title: "Tools & Gear", path: "/category/tools-gear" },
+              { title: "Renovation", path: "/category/renovation" },
+              { title: "Yard & Garden", path: "/category/yard-garden" },
+              { title: "Smart Home", path: "/category/smart-home" },
+              { title: "Beginner Guides", path: "/category/beginner-guides" },
+              { title: "Automotive", path: "/category/automotive" },
+              { title: "Cleaning", path: "/category/cleaning" },
+              { title: "Organization", path: "/category/organization" },
+              { title: "Side Hustles", path: "/category/side-hustles" },
+            ].map((cat) => (
               <Link
                 key={cat.title}
                 href={cat.path}
@@ -196,7 +226,6 @@ export default function Header() {
           document.body
         )}
 
-      {/* PORTAL: Mobile full-width search panel BELOW header */}
       {mounted && searchOpen &&
         createPortal(
           <>
