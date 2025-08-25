@@ -1,15 +1,15 @@
 // pages/category/[slug].js
-import Link from 'next/link';
-import Image from 'next/image';
-import { getServerClient } from '../../lib/sanity';
-import { urlFor } from '../../lib/sanity';
+import Link from "next/link";
+import { sanityFetch } from "../../lib/sanityFetch";
 
 const PER_PAGE = 15;
 
 export default function CategoryPage({ slug, page, pageCount, posts }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-semibold mb-6 capitalize">{slug.replaceAll('-', ' ')}</h1>
+      <h1 className="text-2xl font-semibold mb-6 capitalize">
+        {slug.replaceAll("-", " ")}
+      </h1>
 
       {(!posts || posts.length === 0) && (
         <p className="text-gray-600">No posts found in this category yet.</p>
@@ -19,22 +19,28 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         {(posts || []).map((p) => (
           <li key={p.slug} className="border rounded-md overflow-hidden bg-white">
             <Link href={`/post/${p.slug}`} className="block">
-              {p.mainImage && (
-                <div className="relative aspect-[16/9]">
-                  <Image
-                    src={urlFor(p.mainImage).width(800).height(450).fit('crop').url()}
-                    alt={p.title || 'Post image'}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 1024px) 100vw, 33vw"
+              {/* SAFE IMAGE: fallbacks + plain <img> (no Next image config needed) */}
+              {p.imageUrl ? (
+                <div className="relative w-full aspect-[16/9] bg-gray-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={p.imageUrl}
+                    alt={p.title || "Post image"}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    loading="lazy"
                   />
                 </div>
+              ) : (
+                <div className="relative w-full aspect-[16/9] bg-gray-100 flex items-center justify-center text-gray-500">
+                  No image
+                </div>
               )}
+
               <div className="p-4">
-                <h3 className="font-medium mb-1">{p.title}</h3>
-                {p.excerpt && (
+                <h3 className="font-medium mb-1">{p.title || "Untitled"}</h3>
+                {p.excerpt ? (
                   <p className="text-sm text-gray-700 line-clamp-3">{p.excerpt}</p>
-                )}
+                ) : null}
               </div>
             </Link>
           </li>
@@ -45,7 +51,7 @@ export default function CategoryPage({ slug, page, pageCount, posts }) {
         <nav className="flex items-center justify-between mt-8">
           <PageLink
             disabled={page <= 1}
-            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ''}`}
+            href={`/category/${slug}${page > 2 ? `?page=${page - 1}` : ""}`}
           >
             ← Previous
           </PageLink>
@@ -78,35 +84,37 @@ function PageLink({ href, disabled, children }) {
 }
 
 export async function getServerSideProps({ params, query }) {
-  const slug = String(params.slug || '').toLowerCase();
-  const page = Math.max(1, parseInt(query.page ?? '1', 10));
+  const slug = String(params.slug || "").toLowerCase().trim();
+  const page = Math.max(1, parseInt(query.page ?? "1", 10));
+  const slugPrefix = `${slug}*`; // GROQ glob (not regex)
 
-  // GROQ uses glob '*' (not '.*') for match
-  const slugPrefix = `${slug}*`;
-
+  // Tolerant GROQ: reference category OR legacy string category (prefix)
   const GROQ = `
     *[
       _type == "post" &&
-      !(defined(hidden) && hidden == true) &&
+      defined(slug.current) &&
+      !(_id in path('drafts.**')) &&
       (
-        (defined(category->slug.current) && category->slug.current == $slug)
-        ||
-        lower(replace(coalesce(category->slug.current, string(category)), "[^a-z0-9]+", "-")) match $slugPrefix
+        (defined(category->slug.current) && category->slug.current == $slug) ||
+        (!defined(category._ref) && lower(string(category)) match $slugPrefix)
       )
     ]
     | order(coalesce(publishedAt, _createdAt) desc) {
       title,
       "slug": slug.current,
-      excerpt,
-      mainImage,
-      "categoryTitle": coalesce(category->title, category),
-      publishedAt,
-      _createdAt
+      "excerpt": coalesce(excerpt, blurb),
+      // derive a plain URL so we can use <img>
+      "imageUrl": select(
+        defined(mainImage.asset->url) => mainImage.asset->url,
+        defined(mainImageUrl)         => mainImageUrl,
+        null
+      ),
+      "categoryTitle": coalesce(category->title, string(category)),
+      "publishedAt": coalesce(publishedAt, _createdAt)
     }
   `;
 
-  const client = getServerClient();
-  const all = (await client.fetch(GROQ, { slug, slugPrefix })) || [];
+  const all = (await sanityFetch(GROQ, { slug, slugPrefix })) || [];
   const pageCount = Math.max(1, Math.ceil(all.length / PER_PAGE));
   const start = (page - 1) * PER_PAGE;
   const posts = all.slice(start, start + PER_PAGE);
