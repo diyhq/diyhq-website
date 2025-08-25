@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // Tailwind w-56
+const MENU_W = 224; // w-56
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
@@ -23,49 +23,34 @@ export default function Header() {
 
   useEffect(() => setMounted(true), []);
 
-  // Position the portal dropdown
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
     const gap = 8;
-    const left = Math.min(
-      Math.max(8, rect.right - MENU_W),
-      window.innerWidth - MENU_W - 8
-    );
+    const left = Math.min(Math.max(8, rect.right - MENU_W), window.innerWidth - MENU_W - 8);
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
-  const toggleMenu = () => {
-    setMenuOpen((v) => {
-      const next = !v;
-      if (next) calcMenuPosition();
-      return next;
-    });
-  };
+  const toggleMenu = () => setMenuOpen((v) => {
+    const next = !v;
+    if (next) calcMenuPosition();
+    return next;
+  });
 
-  // Listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
       const btnEl = menuBtnRef.current;
       if (menuOpen && menuEl && btnEl) {
-        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) {
-          setMenuOpen(false);
-        }
+        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) setMenuOpen(false);
       }
     };
     const onKey = (e) => {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        setSearchOpen(false);
-      }
+      if (e.key === "Escape") { setMenuOpen(false); setSearchOpen(false); }
     };
     const onScrollResize = () => {
       if (menuOpen) calcMenuPosition();
-      if (headerRef.current) {
-        const r = headerRef.current.getBoundingClientRect();
-        setSearchTop(r.bottom);
-      }
+      if (headerRef.current) setSearchTop(headerRef.current.getBoundingClientRect().bottom);
     };
     document.addEventListener("mousedown", onDocClick);
     window.addEventListener("keydown", onKey);
@@ -79,18 +64,13 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  useEffect(() => {
-    if (headerRef.current) {
-      setSearchTop(headerRef.current.getBoundingClientRect().bottom);
-    }
-  }, []);
-
+  useEffect(() => { if (headerRef.current) setSearchTop(headerRef.current.getBoundingClientRect().bottom); }, []);
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => (document.body.style.overflow = prev);
+      return () => { document.body.style.overflow = prev; };
     }
   }, [searchOpen, mounted]);
 
@@ -109,13 +89,10 @@ export default function Header() {
 
   return (
     <>
-      {/* Full‑bleed bar so "Categories" reaches the visual far right */}
-      <header
-        ref={headerRef}
-        className="relative z-50 border-b bg-white/90 backdrop-blur left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen"
-      >
-        {/* The row itself (no container width limit) */}
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 md:px-6 min-h-[64px] w-full">
+      {/* Full-width header bar */}
+      <header ref={headerRef} className="relative z-50 w-full bg-white/90 backdrop-blur border-b">
+        {/* Row: logo | search | categories */}
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 md:px-6 min-h-[64px]">
           {/* Left: mobile search + logo */}
           <div className="flex items-center gap-2">
             <button
@@ -148,7 +125,7 @@ export default function Header() {
             </div>
           </div>
 
-          {/* Right: Categories — flush with viewport’s right padding */}
+          {/* Right: Categories pinned to far right */}
           <div className="justify-self-end">
             <button
               ref={menuBtnRef}
@@ -192,16 +169,14 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search sheet */}
+      {/* Mobile search panel */}
       {mounted && searchOpen &&
         createPortal(
           <>
             <div className="fixed inset-0 bg-black/30 z-[90]" onClick={() => setSearchOpen(false)} />
             <div className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3" style={{ top: `${searchTop}px` }}>
               <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <SearchBox />
-                </div>
+                <div className="flex-1"><SearchBox /></div>
                 <button
                   aria-label="Close search"
                   className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100"
