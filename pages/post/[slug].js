@@ -10,10 +10,10 @@ import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-// TODO: Replace these with your real AdSense slot IDs (numbers as strings)
-const LEFT_SLOT  = "REPLACE_WITH_LEFT_SIDEBAR_SLOT_ID";   // e.g., "1234567890"
-const RIGHT_SLOT = "REPLACE_WITH_RIGHT_SIDEBAR_SLOT_ID";  // e.g., "0987654321"
-const INART_SLOT = "REPLACE_WITH_IN_ARTICLE_SLOT_ID";     // e.g., "1122334455"
+// TODO: Replace these with your real AdSense slot IDs once approved
+const LEFT_SLOT  = "XXXXXXXXXX";   // Display (left sidebar)
+const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
+const INART_SLOT = "ZZZZZZZZZZ";   // In-article
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 /**
@@ -279,7 +279,7 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- Step 6 helpers: inject an inline ad block after Nth block ---------- */
+/* ---------- Step 6 helpers: inject inline ad after 3rd block ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
@@ -378,17 +378,17 @@ export default function PostPage({ post, nav }) {
       {/* Load AdSense only on post pages */}
       <AdSenseHead />
 
-      {/* OUTER CONTAINER + GRID: [left ads | content | right ads] on xl+ */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_300px] gap-8">
+      {/* OUTER CONTAINER + GRID: [250px ad | 900px article | 250px ad] */}
+      <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
 
-          {/* LEFT SIDEBAR (hidden on < xl) */}
+          {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
               <AdSlot
                 slot={LEFT_SLOT}
                 format="auto"
-                style={{ display: 'block', width: 300, minHeight: 250 }}
+                style={{ display: 'block', width: 250, minHeight: 250 }}
               />
             </div>
           </aside>
@@ -510,7 +510,13 @@ export default function PostPage({ post, nav }) {
                           {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
                           {stepText && <p className="mb-3">{stepText}</p>}
                           {stepImage && (
-                            <Image src={stepImage} alt={stepAlt} width={1200} height={675} className="rounded-lg mt-2" />
+                            <Image
+                              src={stepImage}
+                              alt={stepAlt}
+                              width={1200}
+                              height={675}
+                              className="rounded-lg mt-2"
+                            />
                           )}
                         </li>
                       );
@@ -591,13 +597,13 @@ export default function PostPage({ post, nav }) {
             </article>
           </main>
 
-          {/* RIGHT SIDEBAR (hidden on < xl) */}
+          {/* RIGHT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
               <AdSlot
                 slot={RIGHT_SLOT}
                 format="auto"
-                style={{ display: 'block', width: 300, minHeight: 250 }}
+                style={{ display: 'block', width: 250, minHeight: 250 }}
               />
             </div>
           </aside>
