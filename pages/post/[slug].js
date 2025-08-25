@@ -14,30 +14,180 @@ const POST_QUERY = `
   excerpt,
   seoTitle,
   seoDescription,
+  estimatedTime,
+  estimatedCost,
+  readTime,
+  difficultyLevel,
+  authorAIName,
+  commentsEnabled,
+  updateLog,
+  featured,
+  "projectTags": projectTags[],
+  videoURL,
+  "affiliateLinks": affiliateLinks[],
+  "faq": faq[],
+  commonMistakes[],
+  safetyTips[],
+  // These can be strings or objects; we will handle both
+  "toolsNeeded": toolsNeeded[],
+  "materialsNeeded": materialsNeeded[],
+  // Steps may be strings or objects with title/text/image
+  "stepByStepInstructions": stepByStepInstructions[]{
+    ...,
+    title,
+    text,
+    image{asset->{url}, alt}
+  },
   mainImage{
     alt,
+    caption,
     asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }
   },
+  // Prefer normalized single ref; gracefully handle legacy categories[0]
   "category": coalesce(
     category->{ _id, title, "slug": slug.current },
     categories[0]->{ _id, title, "slug": slug.current }
   ),
   author->{ _id, name, image{asset->{url}} },
-  body,
-  difficultyLevel,
-  toolsNeeded,
-  materialsNeeded,
-  safetyTips,
-  commonMistakes,
-  stepByStepInstructions,
-  videoURL,
-  affiliateLinks,
-  projectTags,
-  commentsEnabled
+  body
 }
 `;
 
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
+
+// ---------- Portable Text components ----------
+const ptComponents = {
+  block: {
+    h1: ({ children }) => <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>,
+    h2: ({ children }) => <h3 className="text-xl font-semibold mt-8 mb-3">{children}</h3>,
+    h3: ({ children }) => <h4 className="text-lg font-semibold mt-6 mb-3">{children}</h4>,
+    normal: ({ children }) => <p className="my-4 leading-7">{children}</p>,
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-4 pl-4 italic my-4">{children}</blockquote>
+    ),
+  },
+  list: {
+    bullet: ({ children }) => <ul className="list-disc pl-6 my-4 space-y-2">{children}</ul>,
+    number: ({ children }) => <ol className="list-decimal pl-6 my-4 space-y-2">{children}</ol>,
+  },
+  marks: {
+    link: ({ children, value }) => {
+      const href = value?.href || "#";
+      const external = /^https?:\/\//i.test(href);
+      return (
+        <a
+          href={href}
+          target={external ? "_blank" : undefined}
+          rel={external ? "noopener noreferrer" : undefined}
+          className="underline"
+        >
+          {children}
+        </a>
+      );
+    },
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+  },
+};
+
+// ---------- Helpers ----------
+function StringBody({ text }) {
+  const paragraphs = String(text)
+    .split(/\r?\n\s*\r?\n/g)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return null;
+  return (
+    <div className="prose lg:prose-lg max-w-none">
+      {paragraphs.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
+    </div>
+  );
+}
+
+function pill(text) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium">
+      {text}
+    </span>
+  );
+}
+
+function kv(label, value) {
+  if (!value) return null;
+  return (
+    <div className="flex flex-col">
+      <span className="text-xs uppercase tracking-wide opacity-60">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  );
+}
+
+function toCurrency(val) {
+  if (typeof val === "number") return `$${val.toLocaleString()}`;
+  if (typeof val === "string") return val;
+  return null;
+}
+
+function asString(item) {
+  if (!item) return null;
+  if (typeof item === "string") return item;
+  if (typeof item === "object") {
+    // Common shapes: {name, link} or {text}
+    return item.name || item.text || item.title || JSON.stringify(item);
+  }
+  return String(item);
+}
+
+function maybeEmbed(videoURL) {
+  if (!videoURL) return null;
+  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
+  if (isYouTube) {
+    // Normalize to embed
+    let id = "";
+    const m1 = videoURL.match(/v=([^&]+)/);
+    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
+    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
+    if (!id) return null;
+    return (
+      <div className="aspect-video w-full my-8">
+        <iframe
+          className="w-full h-full rounded-xl"
+          src={`https://www.youtube.com/embed/${id}`}
+          title="Video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="my-8">
+      <video className="w-full rounded-xl" src={videoURL} controls />
+    </div>
+  );
+}
+
+function blocksToPlainText(blocks) {
+  try {
+    return blocks
+      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""))
+      .join("\n");
+  } catch {
+    return "";
+  }
+}
+
+function estimateReadMinutes(post) {
+  if (typeof post?.readTime === "number" && post.readTime > 0) return post.readTime;
+  let text = "";
+  if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
+  else if (typeof post?.body === "string") text = post.body;
+  const words = text ? text.trim().split(/\s+/).length : 0;
+  const mins = Math.max(1, Math.round(words / 200)); // 200 wpm
+  return mins;
+}
 
 // ---------- Page ----------
 export default function PostPage({ post }) {
@@ -63,6 +213,19 @@ export default function PostPage({ post }) {
     mainImage,
     body,
     author,
+    difficultyLevel,
+    estimatedTime,
+    estimatedCost,
+    projectTags,
+    toolsNeeded,
+    materialsNeeded,
+    stepByStepInstructions,
+    safetyTips,
+    commonMistakes,
+    videoURL,
+    affiliateLinks,
+    faq,
+    authorAIName,
   } = post;
 
   const displayTitle = title || "Untitled Post";
@@ -72,9 +235,13 @@ export default function PostPage({ post }) {
     (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
   const imageUrl = mainImage?.asset?.url || null;
   const imageAlt = mainImage?.alt || displayTitle;
+  const caption = mainImage?.caption || mainImage?.alt || null;
 
-  const hasBody = Array.isArray(body) && body.length > 0;
+  const isPortable = Array.isArray(body);
+  const isString = typeof body === "string" && body.trim().length > 0;
+
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
+  const readMins = estimateReadMinutes(post);
 
   return (
     <>
@@ -85,24 +252,32 @@ export default function PostPage({ post }) {
         <meta property="og:title" content={metaTitle} />
         {metaDesc && <meta property="og:description" content={metaDesc} />}
         <meta property="og:type" content="article" />
+        {publishedAt && <meta property="article:published_time" content={publishedAt} />}
       </Head>
 
       <article className="max-w-3xl mx-auto px-4 py-10">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold">{displayTitle}</h1>
-          <div className="mt-2 text-sm opacity-70 flex flex-wrap gap-3">
-            {dateText && <span>Published {dateText}</span>}
+        {/* Header */}
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm opacity-80">
+            {dateText && kv("Published", dateText)}
             {category?.title && category?.slug && (
-              <Link className="underline" href={`/category/${category.slug}`}>
-                #{category.title}
-              </Link>
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase tracking-wide opacity-60">Category</span>
+                <Link className="underline" href={`/category/${category.slug}`}>
+                  {category.title}
+                </Link>
+              </div>
             )}
-            {author?.name && <span>By {author.name}</span>}
+            {readMins ? pill(`${readMins} min read`) : null}
+            {difficultyLevel ? pill(difficultyLevel) : null}
+            {author?.name ? pill(`By ${author.name}`) : authorAIName ? pill(authorAIName) : null}
           </div>
         </header>
 
+        {/* Hero */}
         {imageUrl ? (
-          <div className="mb-8">
+          <figure className="mb-6">
             <Image
               src={imageUrl}
               alt={imageAlt}
@@ -111,24 +286,220 @@ export default function PostPage({ post }) {
               className="w-full h-auto rounded-xl"
               priority
             />
-          </div>
+            {caption && (
+              <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
+            )}
+          </figure>
         ) : (
           <div className="mb-8 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
             No image provided
           </div>
         )}
 
-        {typeof excerpt === "string" && excerpt.length > 0 && (
-          <p className="text-lg leading-relaxed mb-8">{excerpt}</p>
+        {/* At-a-glance info */}
+        {(estimatedTime || estimatedCost || difficultyLevel) && (
+          <section className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {kv("Estimated Time", estimatedTime)}
+            {kv("Estimated Cost", toCurrency(estimatedCost))}
+            {kv("Skill Level", difficultyLevel)}
+          </section>
         )}
 
-        {hasBody ? (
-          <div className="prose max-w-none">
-            <PortableText value={body} />
+        {/* Excerpt */}
+        {typeof excerpt === "string" && excerpt.length > 0 && (
+          <p className="text-lg leading-relaxed mb-8 opacity-90">{excerpt}</p>
+        )}
+
+        {/* Body */}
+        {isPortable && (
+          <div className="prose lg:prose-lg max-w-none">
+            <PortableText value={body} components={ptComponents} />
           </div>
-        ) : (
+        )}
+        {!isPortable && isString && <StringBody text={body} />}
+
+        {!isPortable && !isString && (
           <p className="opacity-70">This article hasn’t been populated with content yet.</p>
         )}
+
+        {/* Video */}
+        {maybeEmbed(videoURL)}
+
+        {/* Tools & Materials */}
+        {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
+        (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ? (
+          <section className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-8">
+            {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-semibold mb-3">Tools Needed</h2>
+                <ul className="list-disc pl-6 space-y-2">
+                  {toolsNeeded.map((t, i) => (
+                    <li key={i}>{asString(t)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {Array.isArray(materialsNeeded) && materialsNeeded.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-semibold mb-3">Materials Needed</h2>
+                <ul className="list-disc pl-6 space-y-2">
+                  {materialsNeeded.map((m, i) => (
+                    <li key={i}>{asString(m)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {/* Step-by-step */}
+        {Array.isArray(stepByStepInstructions) && stepByStepInstructions.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
+            <ol className="list-decimal pl-6 space-y-6">
+              {stepByStepInstructions.map((s, i) => {
+                const stepText = asString(s?.text) || asString(s);
+                const stepTitle = s?.title ? String(s.title) : null;
+                const stepImage = s?.image?.asset?.url || null;
+                const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
+                return (
+                  <li key={i}>
+                    {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
+                    {stepText && <p className="mb-3">{stepText}</p>}
+                    {stepImage && (
+                      <Image
+                        src={stepImage}
+                        alt={stepAlt}
+                        width={1200}
+                        height={675}
+                        className="rounded-lg mt-2"
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        )}
+
+        {/* Safety / Mistakes */}
+        {(Array.isArray(safetyTips) && safetyTips.length > 0) ||
+        (Array.isArray(commonMistakes) && commonMistakes.length > 0) ? (
+          <section className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-8">
+            {Array.isArray(safetyTips) && safetyTips.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-semibold mb-3">Safety Tips</h2>
+                <ul className="list-disc pl-6 space-y-2">
+                  {safetyTips.map((s, i) => (
+                    <li key={i}>{asString(s)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
+                <ul className="list-disc pl-6 space-y-2">
+                  {commonMistakes.map((c, i) => (
+                    <li key={i}>{asString(c)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {/* FAQ */}
+        {Array.isArray(faq) && faq.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
+            <div className="space-y-4">
+              {faq.map((f, i) => {
+                if (typeof f === "string") {
+                  return (
+                    <details key={i} className="rounded-lg border p-4">
+                      <summary className="cursor-pointer font-medium">Q{i + 1}</summary>
+                      <p className="mt-2">{f}</p>
+                    </details>
+                  );
+                }
+                const q = f?.question || f?.q || `Q${i + 1}`;
+                const a = f?.answer || f?.a || asString(f);
+                return (
+                  <details key={i} className="rounded-lg border p-4">
+                    <summary className="cursor-pointer font-medium">{q}</summary>
+                    {a && <p className="mt-2">{a}</p>}
+                  </details>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Affiliate Links */}
+        {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-2xl font-semibold mb-3">Affiliate Links</h2>
+            <ul className="list-disc pl-6 space-y-2">
+              {affiliateLinks.map((link, i) => {
+                const label = asString(link);
+                const href =
+                  typeof link === "string" && /^https?:\/\//i.test(link) ? link : undefined;
+                return (
+                  <li key={i}>
+                    {href ? (
+                      <a
+                        className="underline"
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {label}
+                      </a>
+                    ) : (
+                      label
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-xs opacity-60 mt-2">
+              Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra
+              cost to you.
+            </p>
+          </section>
+        )}
+
+        {/* Tags */}
+        {Array.isArray(projectTags) && projectTags.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-2xl font-semibold mb-3">Tags</h2>
+            <div className="flex flex-wrap gap-2">
+              {projectTags.map((t, i) => (
+                <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
+                  {asString(t)}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Footer nav */}
+        <footer className="mt-12 flex items-center justify-between">
+          {category?.slug ? (
+            <Link className="text-blue-600 underline" href={`/category/${category.slug}`}>
+              ← Back to {category.title}
+            </Link>
+          ) : (
+            <Link className="text-blue-600 underline" href="/">
+              ← Back to Home
+            </Link>
+          )}
+          {/* Placeholder for future ShareToolbar integration */}
+          <div id="share-toolbar" className="opacity-60 text-sm">
+            {/* add ShareToolbar later */}
+          </div>
+        </footer>
       </article>
     </>
   );
