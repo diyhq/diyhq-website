@@ -36,6 +36,7 @@ export default function Header() {
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
+
   const toggleMenu = () => {
     setMenuOpen((v) => {
       const next = !v;
@@ -113,59 +114,67 @@ export default function Header() {
   ];
 
   return (
+    // FULL‑BLEED WRAPPER: make the header span the viewport even if it's
+    // rendered inside a centered container.
     <header
       ref={headerRef}
-      className="relative z-40 bg-white border-b shadow-md px-4 md:px-6 py-3"
+      className="
+        relative z-40 bg-white border-b shadow-md
+        w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]
+      "
     >
-      {/* GRID: logo-left | search-center | categories-right */}
-      <div className="grid grid-cols-[auto_1fr_auto] items-center w-full">
-        {/* Left: Logo */}
-        <div className="flex items-center">
-          <Link href="/" aria-label="DIY HQ Home" className="block">
-            <Image
-              src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
-              alt="DIY HQ Logo"
-              width={160}
-              height={80}
-              priority
-              className="object-contain"
-            />
-          </Link>
-        </div>
-
-        {/* Center: Search */}
-        <div className="hidden md:flex justify-center w-full">
-          <div className="w-full max-w-xl">
-            <SearchBox />
-          </div>
-        </div>
-
-        {/* Right: Categories (flush to far right) */}
-        <div className="flex justify-end">
-          <button
-            ref={menuBtnRef}
-            onClick={toggleMenu}
-            className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            aria-controls="site-categories-menu"
-          >
-            <svg
-              className="h-7 w-7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 6h16M4 12h16M4 18h16"
+      {/* Inner content with padding */}
+      <div className="px-4 md:px-6 py-3">
+        {/* GRID: logo-left | search-center | categories-right */}
+        <div className="grid grid-cols-[auto_1fr_auto] items-center w-full">
+          {/* Left: Logo */}
+          <div className="flex items-center">
+            <Link href="/" aria-label="DIY HQ Home" className="block">
+              <Image
+                src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
+                alt="DIY HQ Logo"
+                width={160}
+                height={80}
+                priority
+                className="object-contain"
               />
-            </svg>
-            <span>Categories</span>
-          </button>
+            </Link>
+          </div>
+
+          {/* Center: Search */}
+          <div className="hidden md:flex justify-center w-full">
+            <div className="w-full max-w-xl">
+              <SearchBox />
+            </div>
+          </div>
+
+          {/* Right: Categories (flush to right padding) */}
+          <div className="justify-self-end">
+            <button
+              ref={menuBtnRef}
+              onClick={toggleMenu}
+              className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-controls="site-categories-menu"
+            >
+              <svg
+                className="h-7 w-7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+              <span>Categories</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -194,7 +203,9 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel (beneath header) */}
+      {/* Mobile search panel (beneath header). 
+         NOTE: you'll need a button somewhere (e.g., a left search icon) to call setSearchOpen(true)
+         if you want to use this panel on mobile. */}
       {mounted && searchOpen &&
         createPortal(
           <>
