@@ -6,8 +6,7 @@ import { PortableText } from "@portabletext/react";
 import SocialShareBar from "../../components/SocialShareBar.jsx";
 
 /**
- * GROQ: prefer normalized category ref; fallback to legacy categories[0].
- * Pull everything we use + _createdAt for nav fallback.
+ * Pull everything we use; prefer normalized category ref with legacy fallback.
  */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
@@ -57,7 +56,7 @@ const POST_QUERY = `
 
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
 
-/** Prev/Next within same category by publishedAt (fallback _createdAt). */
+/** Prev/Next in same category by publishedAt (fallback _createdAt), including UI meta. */
 const NAV_QUERY = `
 {
   "prev": *[
@@ -66,7 +65,12 @@ const NAV_QUERY = `
     coalesce(category->slug.current, categories[0]->slug.current) == $category &&
     coalesce(publishedAt, _createdAt) < $date
   ] | order(coalesce(publishedAt, _createdAt) desc)[0]{
-    title, "slug": slug.current, mainImage{asset->{url}}
+    title,
+    "slug": slug.current,
+    difficultyLevel,
+    estimatedCost,
+    readTime,
+    mainImage{asset->{url}}
   },
   "next": *[
     _type == "post" &&
@@ -74,12 +78,17 @@ const NAV_QUERY = `
     coalesce(category->slug.current, categories[0]->slug.current) == $category &&
     coalesce(publishedAt, _createdAt) > $date
   ] | order(coalesce(publishedAt, _createdAt) asc)[0]{
-    title, "slug": slug.current, mainImage{asset->{url}}
+    title,
+    "slug": slug.current,
+    difficultyLevel,
+    estimatedCost,
+    readTime,
+    mainImage{asset->{url}}
   }
 }
 `;
 
-// ---------- Portable Text components ----------
+/* ---------------- PortableText components ---------------- */
 const ptComponents = {
   block: {
     h1: ({ children }) => <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>,
@@ -114,15 +123,33 @@ const ptComponents = {
   },
 };
 
-// ---------- Helpers ----------
+/* ---------------- Helpers ---------------- */
 function sanitizePlainText(text) {
-  // Clean legacy artifacts like "function anchor() [native code]"
+  if (text == null) return text;
   let t = String(text);
+  // Kill legacy artifacts like "function anchor() [native code]" or variants.
   t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
+  t = t.replace(/\bfunction\s+anchor\b/gi, "");
   t = t.replace(/\[ ?native code ?\]/gi, "");
-  t = t.replace(/function\s+anchor\s*\(\)/gi, "");
+  // Consolidate whitespace
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
+}
+
+function sanitizePortableText(blocks) {
+  if (!Array.isArray(blocks)) return blocks;
+  return blocks.map((b) => {
+    if (b && typeof b === "object") {
+      const out = { ...b };
+      if (Array.isArray(out.children)) {
+        out.children = out.children.map((c) =>
+          c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
+        );
+      }
+      return out;
+    }
+    return b;
+  });
 }
 
 function StringBody({ text }) {
@@ -217,18 +244,45 @@ function estimateReadMinutes(post) {
 
 function NavCard({ label, item }) {
   if (!item) return null;
+  const thumb = item?.mainImage?.asset?.url || null;
+  const chips = [];
+  if (item.difficultyLevel) chips.push(item.difficultyLevel);
+  if (item.readTime) chips.push(`${item.readTime} min`);
+  const cost = toCurrency(item.estimatedCost);
+  if (cost) chips.push(cost);
+
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group rounded-lg border p-4 hover:bg-gray-50 transition"
+      className="group grid grid-cols-[4rem,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
     >
-      <div className="text-xs uppercase tracking-wide opacity-60">{label}</div>
-      <div className="mt-1 font-medium group-hover:underline">{item.title}</div>
+      {thumb ? (
+        <Image
+          src={thumb}
+          alt=""
+          width={64}
+          height={64}
+          className="h-16 w-16 rounded object-cover"
+        />
+      ) : (
+        <div className="h-16 w-16 rounded bg-gray-100" />
+      )}
+      <div className="min-w-0">
+        <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
+        <div className="mt-1 font-medium group-hover:underline line-clamp-2">{item.title}</div>
+        {chips.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-70">
+            {chips.map((c, i) => (
+              <span key={i}>{c}</span>
+            ))}
+          </div>
+        )}
+      </div>
     </Link>
   );
 }
 
-// ---------- Page ----------
+/* ---------------- Page ---------------- */
 export default function PostPage({ post, nav }) {
   if (!post) {
     return (
@@ -300,6 +354,18 @@ export default function PostPage({ post, nav }) {
 
   const hasTopSafety = Array.isArray(safetyTips) && safetyTips.length > 0;
 
+  // Filter out empty steps (no title, no text, no image)
+  const steps = Array.isArray(stepByStepInstructions)
+    ? stepByStepInstructions.filter(
+        (s) => asString(s?.title) || asString(s?.text) || s?.image?.asset?.url
+      )
+    : [];
+
+  // FAQ visibility: show only if at least one answer is present
+  const faqWithAnswers =
+    Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
+  const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
+
   return (
     <>
       <Head>
@@ -314,10 +380,7 @@ export default function PostPage({ post, nav }) {
         {(publishedAt || _createdAt) && (
           <meta property="article:published_time" content={publishedAt || _createdAt} />
         )}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
       </Head>
 
       <article className="max-w-3xl mx-auto px-4 py-10">
@@ -337,9 +400,7 @@ export default function PostPage({ post, nav }) {
               className="w-full h-auto rounded-xl"
               priority
             />
-            {caption && (
-              <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
-            )}
+            {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
           </figure>
         ) : (
           <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
@@ -366,7 +427,7 @@ export default function PostPage({ post, nav }) {
           </div>
         </section>
 
-        {/* Share bar (uses your existing component API: url/title/media) */}
+        {/* Share bar (your component) */}
         <div className="mb-6">
           <SocialShareBar url={canonicalUrl} title={displayTitle} media={imageUrl || ""} />
         </div>
@@ -428,12 +489,12 @@ export default function PostPage({ post, nav }) {
         {/* Video */}
         {maybeEmbed(videoURL)}
 
-        {/* Step-by-step */}
-        {Array.isArray(stepByStepInstructions) && stepByStepInstructions.length > 0 && (
+        {/* Step-by-step (only if at least one populated item) */}
+        {steps.length > 0 && (
           <section className="mt-10">
             <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
             <ol className="list-decimal pl-6 space-y-6">
-              {stepByStepInstructions.map((s, i) => {
+              {steps.map((s, i) => {
                 const stepText = asString(s?.text) || asString(s);
                 const stepTitle = s?.title ? String(s.title) : null;
                 const stepImage = s?.image?.asset?.url || null;
@@ -470,41 +531,32 @@ export default function PostPage({ post, nav }) {
           </section>
         )}
 
-        {/* FAQ — expanded */}
-        {Array.isArray(faq) && faq.length > 0 && (
+        {/* FAQ — only if answers present, expanded */}
+        {showFaq && (
           <section className="mt-10">
             <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
-            {faq.some((f) => typeof f === "object" && (f?.question || f?.answer)) ? (
-              <div className="space-y-6">
-                {faq.map((f, i) => {
-                  const q =
-                    typeof f === "object" ? f?.question || f?.q || `Question ${i + 1}` : String(f);
-                  const a = typeof f === "object" ? f?.answer || f?.a || "" : "";
-                  return (
-                    <div key={i} className="rounded-lg border p-4">
-                      <div className="font-medium">{q}</div>
-                      {a ? <p className="mt-2">{a}</p> : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <ul className="list-disc pl-6 space-y-2">
-                {faq.map((q, i) => (
-                  <li key={i}>{asString(q)}</li>
-                ))}
-              </ul>
-            )}
+            <div className="space-y-6">
+              {faqWithAnswers.map((f, i) => {
+                const q = f?.question || f?.q || `Question ${i + 1}`;
+                const a = f?.answer || f?.a || "";
+                return (
+                  <div key={i} className="rounded-lg border p-4">
+                    <div className="font-medium">{q}</div>
+                    {a ? <p className="mt-2">{a}</p> : null}
+                  </div>
+                );
+              })}
+            </div>
           </section>
         )}
 
-        {/* Prev / Next */}
+        {/* Prev / Next — 2 columns even on phones */}
         {(nav?.prev || nav?.next) && (
           <section className="mt-12 border-t pt-8">
             <h2 className="text-xl font-semibold mb-4">
               More in {category?.title || "DIY HQ"}
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <NavCard label="Previous" item={nav.prev} />
               <NavCard label="Next" item={nav.next} />
             </div>
@@ -543,21 +595,49 @@ export default function PostPage({ post, nav }) {
   );
 }
 
-// ---------- Data fetching ----------
+/* ---------------- Data fetching ---------------- */
 export async function getStaticProps({ params }) {
   try {
     const { client } = await import("../../lib/sanity.client");
-    const post = await client.fetch(POST_QUERY, { slug: params.slug });
-    if (!post) return { notFound: true, revalidate: 60 };
+    const raw = await client.fetch(POST_QUERY, { slug: params.slug });
+    if (!raw) return { notFound: true, revalidate: 60 };
+
+    // Sanitize legacy artifacts across PT + strings
+    const post = { ...raw };
+    if (Array.isArray(post.body)) post.body = sanitizePortableText(post.body);
+    if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
+    if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
+    ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach(
+      (k) => {
+        if (Array.isArray(post[k])) {
+          post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
+        }
+      }
+    );
+    if (Array.isArray(post.stepByStepInstructions)) {
+      post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
+        ...s,
+        title: sanitizePlainText(asString(s?.title)),
+        text: sanitizePlainText(asString(s?.text)),
+      }));
+    }
+    if (Array.isArray(post.faq)) {
+      post.faq = post.faq.map((f) =>
+        typeof f === "object"
+          ? {
+              ...f,
+              question: sanitizePlainText(asString(f?.question || f?.q)),
+              answer: sanitizePlainText(asString(f?.answer || f?.a)),
+            }
+          : sanitizePlainText(asString(f))
+      );
+    }
 
     // Prev/Next only if we have a category
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
     const cat = post?.category?.slug || null;
-
-    if (date && cat) {
-      nav = await client.fetch(NAV_QUERY, { date, category: cat });
-    }
+    if (date && cat) nav = await client.fetch(NAV_QUERY, { date, category: cat });
 
     return { props: { post, nav }, revalidate: 60 };
   } catch {
