@@ -22,8 +22,8 @@ const POST_QUERY = `
     category->{
       _id, title, "slug": slug.current
     },
-    select(defined(categories) && count(categories) > 0,
-      categories[0]->{ _id, title, "slug": slug.current },
+    select(
+      defined(categories) && count(categories) > 0 => categories[0]->{ _id, title, "slug": slug.current },
       null
     )
   ),
@@ -50,9 +50,7 @@ export default function PostPage({ post }) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
-        <p className="opacity-80">
-          The post you’re looking for doesn’t exist or isn’t available yet.
-        </p>
+        <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
         <div className="mt-6">
           <Link className="text-blue-600 underline" href="/">Go back home</Link>
         </div>
@@ -108,7 +106,6 @@ export default function PostPage({ post }) {
           </div>
         </header>
 
-        {/* Image (safe) */}
         {imageUrl ? (
           <div className="mb-8">
             <Image
@@ -126,12 +123,10 @@ export default function PostPage({ post }) {
           </div>
         )}
 
-        {/* Excerpt (safe) */}
         {typeof excerpt === "string" && excerpt.length > 0 && (
           <p className="text-lg leading-relaxed mb-8">{excerpt}</p>
         )}
 
-        {/* Body (safe) */}
         {hasBody ? (
           <div className="prose max-w-none">
             <PortableText value={body} />
@@ -147,12 +142,9 @@ export default function PostPage({ post }) {
 // ---------- Data fetching ----------
 export async function getStaticProps({ params }) {
   try {
-    // Dynamic import to keep token out of the client bundle
     const { client } = await import("../../lib/sanity.client");
     const post = await client.fetch(POST_QUERY, { slug: params.slug });
-    if (!post) {
-      return { notFound: true, revalidate: 60 };
-    }
+    if (!post) return { notFound: true, revalidate: 60 };
     return { props: { post }, revalidate: 60 };
   } catch {
     return { notFound: true, revalidate: 60 };
@@ -161,7 +153,6 @@ export async function getStaticProps({ params }) {
 
 export async function getStaticPaths() {
   try {
-    // Dynamic import to keep token out of the client bundle
     const { client } = await import("../../lib/sanity.client");
     const slugs = await client.fetch(SLUGS_QUERY);
     return {
