@@ -3,14 +3,16 @@ import Head from "next/head";
 import Image from "next/image";
 import Link from "next/link";
 import { PortableText } from "@portabletext/react";
+import SocialShareBar from "../../components/SocialShareBar.jsx";
 
 /**
  * GROQ: prefer normalized category ref; fallback to legacy categories[0].
- * Pull fields we need for hero, meta, excerpt, tools/materials and the rest.
+ * Pull everything we use + _createdAt for nav fallback.
  */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,
+  _createdAt,
   title,
   "slug": slug.current,
   publishedAt,
@@ -55,6 +57,28 @@ const POST_QUERY = `
 
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
 
+/** Prev/Next within same category by publishedAt (fallback _createdAt). */
+const NAV_QUERY = `
+{
+  "prev": *[
+    _type == "post" &&
+    defined(slug.current) &&
+    coalesce(category->slug.current, categories[0]->slug.current) == $category &&
+    coalesce(publishedAt, _createdAt) < $date
+  ] | order(coalesce(publishedAt, _createdAt) desc)[0]{
+    title, "slug": slug.current, mainImage{asset->{url}}
+  },
+  "next": *[
+    _type == "post" &&
+    defined(slug.current) &&
+    coalesce(category->slug.current, categories[0]->slug.current) == $category &&
+    coalesce(publishedAt, _createdAt) > $date
+  ] | order(coalesce(publishedAt, _createdAt) asc)[0]{
+    title, "slug": slug.current, mainImage{asset->{url}}
+  }
+}
+`;
+
 // ---------- Portable Text components ----------
 const ptComponents = {
   block: {
@@ -91,8 +115,19 @@ const ptComponents = {
 };
 
 // ---------- Helpers ----------
+function sanitizePlainText(text) {
+  // Clean legacy artifacts like "function anchor() [native code]"
+  let t = String(text);
+  t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
+  t = t.replace(/\[ ?native code ?\]/gi, "");
+  t = t.replace(/function\s+anchor\s*\(\)/gi, "");
+  t = t.replace(/[ \t]{2,}/g, " ");
+  return t.trim();
+}
+
 function StringBody({ text }) {
-  const paragraphs = String(text)
+  const cleaned = sanitizePlainText(text);
+  const paragraphs = cleaned
     .split(/\r?\n\s*\r?\n/g)
     .map((p) => p.trim())
     .filter(Boolean);
@@ -180,8 +215,21 @@ function estimateReadMinutes(post) {
   return mins;
 }
 
+function NavCard({ label, item }) {
+  if (!item) return null;
+  return (
+    <Link
+      href={`/post/${item.slug}`}
+      className="group rounded-lg border p-4 hover:bg-gray-50 transition"
+    >
+      <div className="text-xs uppercase tracking-wide opacity-60">{label}</div>
+      <div className="mt-1 font-medium group-hover:underline">{item.title}</div>
+    </Link>
+  );
+}
+
 // ---------- Page ----------
-export default function PostPage({ post }) {
+export default function PostPage({ post, nav }) {
   if (!post) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
@@ -200,6 +248,7 @@ export default function PostPage({ post }) {
     seoTitle,
     seoDescription,
     publishedAt,
+    _createdAt,
     category,
     mainImage,
     body,
@@ -210,8 +259,8 @@ export default function PostPage({ post }) {
     projectTags,
     toolsNeeded,
     materialsNeeded,
-    stepByStepInstructions,
     safetyTips,
+    stepByStepInstructions,
     commonMistakes,
     videoURL,
     affiliateLinks,
@@ -219,6 +268,7 @@ export default function PostPage({ post }) {
     authorAIName,
   } = post;
 
+  const slug = post.slug;
   const displayTitle = title || "Untitled Post";
   const metaTitle = seoTitle || displayTitle;
   const metaDesc =
@@ -228,25 +278,27 @@ export default function PostPage({ post }) {
   const imageAlt = mainImage?.alt || displayTitle;
   const caption = mainImage?.caption || mainImage?.alt || null;
 
-  const isPortable = Array.isArray(body);
-  const isString = typeof body === "string" && body.trim().length > 0;
-
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
   const readMins = estimateReadMinutes(post);
   const costText = toCurrency(estimatedCost);
 
-  // --- JSON-LD (helps Google understand the article) ---
+  // Canonical URL for share + SEO
+  const canonicalUrl = `https://www.doityourselfhq.com/post/${slug}`;
+
+  // JSON-LD
   const articleLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: displayTitle,
     image: imageUrl ? [imageUrl] : undefined,
-    datePublished: publishedAt || undefined,
+    datePublished: publishedAt || _createdAt || undefined,
     articleSection: category?.title || undefined,
     author: [{ "@type": "Person", name: author?.name || authorAIName || "DIY HQ Team" }],
     keywords: Array.isArray(projectTags) ? projectTags.map(asString).join(", ") : undefined,
     description: metaDesc,
   };
+
+  const hasTopSafety = Array.isArray(safetyTips) && safetyTips.length > 0;
 
   return (
     <>
@@ -257,18 +309,20 @@ export default function PostPage({ post }) {
         <meta property="og:title" content={metaTitle} />
         {metaDesc && <meta property="og:description" content={metaDesc} />}
         <meta property="og:type" content="article" />
-        {publishedAt && <meta property="article:published_time" content={publishedAt} />}
-
+        <meta property="og:url" content={canonicalUrl} />
+        <link rel="canonical" href={canonicalUrl} />
+        {(publishedAt || _createdAt) && (
+          <meta property="article:published_time" content={publishedAt || _createdAt} />
+        )}
         <script
           type="application/ld+json"
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
         />
       </Head>
 
       <article className="max-w-3xl mx-auto px-4 py-10">
-        {/* Title — no card/box styling */}
-        <header className="mb-4 bg-transparent p-0 border-0 shadow-none">
+        {/* Title (plain, no box) */}
+        <header className="mb-4">
           <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
         </header>
 
@@ -283,7 +337,6 @@ export default function PostPage({ post }) {
               className="w-full h-auto rounded-xl"
               priority
             />
-            {/* Caption or Alt displayed for SEO clarity */}
             {caption && (
               <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
             )}
@@ -294,8 +347,8 @@ export default function PostPage({ post }) {
           </div>
         )}
 
-        {/* Meta row UNDER the hero, with your order inside a subtle grey box */}
-        <section className="mt-3 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
+        {/* Meta row under hero */}
+        <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
             {kv("Author", author?.name || authorAIName)}
             {kv("Skill Level", difficultyLevel)}
@@ -313,15 +366,21 @@ export default function PostPage({ post }) {
           </div>
         </section>
 
+        {/* Share bar (uses your existing component API: url/title/media) */}
+        <div className="mb-6">
+          <SocialShareBar url={canonicalUrl} title={displayTitle} media={imageUrl || ""} />
+        </div>
+
         {/* Excerpt */}
         {typeof excerpt === "string" && excerpt.length > 0 && (
           <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
         )}
 
-        {/* Tools & Materials — smaller text, dense lists, near the top */}
+        {/* Tools / Materials / Safety (3 columns on large) */}
         {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
-        (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ? (
-          <section className="mb-10 grid grid-cols-1 sm:grid-cols-2 gap-8">
+        (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ||
+        hasTopSafety ? (
+          <section className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
               <div>
                 <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
@@ -342,6 +401,16 @@ export default function PostPage({ post }) {
                 </ul>
               </div>
             )}
+            {hasTopSafety && (
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Safety Tips</h2>
+                <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
+                  {safetyTips.map((s, i) => (
+                    <li key={i}>{asString(s)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
         ) : null}
 
@@ -356,7 +425,7 @@ export default function PostPage({ post }) {
           <p className="opacity-70">This article hasn’t been populated with content yet.</p>
         )}
 
-        {/* Video (optional) */}
+        {/* Video */}
         {maybeEmbed(videoURL)}
 
         {/* Step-by-step */}
@@ -389,34 +458,19 @@ export default function PostPage({ post }) {
           </section>
         )}
 
-        {/* Safety / Mistakes */}
-        {(Array.isArray(safetyTips) && safetyTips.length > 0) ||
-        (Array.isArray(commonMistakes) && commonMistakes.length > 0) ? (
-          <section className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-8">
-            {Array.isArray(safetyTips) && safetyTips.length > 0 && (
-              <div>
-                <h2 className="text-2xl font-semibold mb-3">Safety Tips</h2>
-                <ul className="list-disc pl-6 space-y-2">
-                  {safetyTips.map((s, i) => (
-                    <li key={i}>{asString(s)}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
-              <div>
-                <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
-                <ul className="list-disc pl-6 space-y-2">
-                  {commonMistakes.map((c, i) => (
-                    <li key={i}>{asString(c)}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+        {/* Common Mistakes */}
+        {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
+            <ul className="list-disc pl-6 space-y-2">
+              {commonMistakes.map((c, i) => (
+                <li key={i}>{asString(c)}</li>
+              ))}
+            </ul>
           </section>
-        ) : null}
+        )}
 
-        {/* FAQ — expanded, no clicking */}
+        {/* FAQ — expanded */}
         {Array.isArray(faq) && faq.length > 0 && (
           <section className="mt-10">
             <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
@@ -444,37 +498,16 @@ export default function PostPage({ post }) {
           </section>
         )}
 
-        {/* Affiliate Links */}
-        {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-2xl font-semibold mb-3">Affiliate Links</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              {affiliateLinks.map((link, i) => {
-                const label = asString(link);
-                const href =
-                  typeof link === "string" && /^https?:\/\//i.test(link) ? link : undefined;
-                return (
-                  <li key={i}>
-                    {href ? (
-                      <a
-                        className="underline"
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {label}
-                      </a>
-                    ) : (
-                      label
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="text-xs opacity-60 mt-2">
-              Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra
-              cost to you.
-            </p>
+        {/* Prev / Next */}
+        {(nav?.prev || nav?.next) && (
+          <section className="mt-12 border-t pt-8">
+            <h2 className="text-xl font-semibold mb-4">
+              More in {category?.title || "DIY HQ"}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <NavCard label="Previous" item={nav.prev} />
+              <NavCard label="Next" item={nav.next} />
+            </div>
           </section>
         )}
 
@@ -516,7 +549,17 @@ export async function getStaticProps({ params }) {
     const { client } = await import("../../lib/sanity.client");
     const post = await client.fetch(POST_QUERY, { slug: params.slug });
     if (!post) return { notFound: true, revalidate: 60 };
-    return { props: { post }, revalidate: 60 };
+
+    // Prev/Next only if we have a category
+    let nav = { prev: null, next: null };
+    const date = post.publishedAt || post._createdAt || null;
+    const cat = post?.category?.slug || null;
+
+    if (date && cat) {
+      nav = await client.fetch(NAV_QUERY, { date, category: cat });
+    }
+
+    return { props: { post, nav }, revalidate: 60 };
   } catch {
     return { notFound: true, revalidate: 60 };
   }
