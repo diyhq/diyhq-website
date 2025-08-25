@@ -1,8 +1,8 @@
 // pages/api/debug-post.js
-// Test locally:  http://localhost:3000/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
-// Test on prod:  https://www.doityourselfhq.com/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
+// Local test:  http://localhost:3000/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
+// Prod test:   https://www.doityourselfhq.com/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
 
-import { client } from "@/lib/sanity.client";
+import { client } from "../../sanity/lib/client";
 
 export default async function handler(req, res) {
   try {

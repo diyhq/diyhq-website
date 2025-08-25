@@ -3,7 +3,7 @@ import Head from "next/head";
 import Image from "next/image";
 import Link from "next/link";
 import { PortableText } from "@portabletext/react";
-import { client } from "@/lib/sanity.client";
+import { client } from "../../sanity/lib/client";
 
 // ---------- GROQ ----------
 const POST_QUERY = `
