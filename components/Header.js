@@ -10,21 +10,20 @@ const MENU_W = 224; // Tailwind w-56 (14rem)
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories (right) menu state
+  // Categories menu state
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search panel state
+  // Mobile search state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
   const headerRef = useRef(null);
-
   useEffect(() => setMounted(true), []);
 
-  // ---- Position Categories portal
+  // --- Position portal dropdown next to the button
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -36,7 +35,6 @@ export default function Header() {
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
-
   const toggleMenu = () => {
     setMenuOpen((v) => {
       const next = !v;
@@ -45,11 +43,11 @@ export default function Header() {
     });
   };
 
-  // ---- Global listeners
+  // --- Global listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
-      const btnEl = menuBtnRef.current;
+      const btnEl  = menuBtnRef.current;
       if (menuOpen && menuEl && btnEl) {
         if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) {
           setMenuOpen(false);
@@ -82,10 +80,11 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // initial mobile search offset
+  // initial offset for the mobile search sheet
   useEffect(() => {
-    if (!headerRef.current) return;
-    setSearchTop(headerRef.current.getBoundingClientRect().bottom);
+    if (headerRef.current) {
+      setSearchTop(headerRef.current.getBoundingClientRect().bottom);
+    }
   }, []);
 
   // lock body scroll when mobile search is open
@@ -94,9 +93,7 @@ export default function Header() {
     if (searchOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
+      return () => { document.body.style.overflow = prev; };
     }
   }, [searchOpen, mounted]);
 
@@ -114,21 +111,30 @@ export default function Header() {
   ];
 
   return (
-    // FULL‑BLEED WRAPPER: make the header span the viewport even if it's
-    // rendered inside a centered container.
-    <header
-      ref={headerRef}
-      className="
-        relative z-40 bg-white border-b shadow-md
-        w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]
-      "
-    >
-      {/* Inner content with padding */}
-      <div className="px-4 md:px-6 py-3">
-        {/* GRID: logo-left | search-center | categories-right */}
-        <div className="grid grid-cols-[auto_1fr_auto] items-center w-full">
-          {/* Left: Logo */}
-          <div className="flex items-center">
+    <>
+      {/* Full‑bleed header: breaks out of any parent .container */}
+      <header
+        ref={headerRef}
+        className="
+          relative z-50 border-b bg-white/90 backdrop-blur
+          left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen
+        "
+      >
+        {/* Inner row with symmetric paddings */}
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 md:px-6 min-h-[64px]">
+          {/* Left: Logo + (mobile) search icon */}
+          <div className="flex items-center gap-2">
+            <button
+              className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-700"
+              aria-label="Open search"
+              onClick={() => setSearchOpen(true)}
+            >
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </button>
+
             <Link href="/" aria-label="DIY HQ Home" className="block">
               <Image
                 src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
@@ -141,14 +147,14 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Center: Search */}
-          <div className="hidden md:flex justify-center w-full">
-            <div className="w-full max-w-xl">
+          {/* Center: Search (desktop only) */}
+          <div className="hidden md:flex justify-center min-w-0">
+            <div className="w-full max-w-xl min-w-0">
               <SearchBox />
             </div>
           </div>
 
-          {/* Right: Categories (flush to right padding) */}
+          {/* Right: Categories — flush to far right */}
           <div className="justify-self-end">
             <button
               ref={menuBtnRef}
@@ -158,27 +164,16 @@ export default function Header() {
               aria-expanded={menuOpen}
               aria-controls="site-categories-menu"
             >
-              <svg
-                className="h-7 w-7"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+              <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
               <span>Categories</span>
             </button>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Categories dropdown (portal, overlaps all) */}
+      {/* Categories dropdown (portal; overlaps everything) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -203,20 +198,12 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel (beneath header). 
-         NOTE: you'll need a button somewhere (e.g., a left search icon) to call setSearchOpen(true)
-         if you want to use this panel on mobile. */}
+      {/* Mobile search panel (slides under header) */}
       {mounted && searchOpen &&
         createPortal(
           <>
-            <div
-              className="fixed inset-0 bg-black/30 z-[90]"
-              onClick={() => setSearchOpen(false)}
-            />
-            <div
-              className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3"
-              style={{ top: `${searchTop}px` }}
-            >
+            <div className="fixed inset-0 bg-black/30 z-[90]" onClick={() => setSearchOpen(false)} />
+            <div className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3" style={{ top: `${searchTop}px` }}>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <SearchBox />
@@ -226,15 +213,9 @@ export default function Header() {
                   className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100"
                   onClick={() => setSearchOpen(false)}
                 >
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
               </div>
@@ -242,6 +223,6 @@ export default function Header() {
           </>,
           document.body
         )}
-    </header>
+    </>
   );
 }
