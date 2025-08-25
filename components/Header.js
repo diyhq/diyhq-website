@@ -5,25 +5,26 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // Tailwind w-56 = 14rem
+const MENU_W = 224; // Tailwind w-56 (14rem)
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories menu
+  // Categories (right) menu
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search
+  // Mobile search panel
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
   const headerRef = useRef(null);
+
   useEffect(() => setMounted(true), []);
 
-  // Position categories menu (portal)
+  // --- position the Categories menu (portal) ---
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -43,7 +44,7 @@ export default function Header() {
     });
   };
 
-  // Listeners
+  // --- listeners / layout helpers ---
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
@@ -80,13 +81,13 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // Initial mobile search offset
+  // initial mobile search offset
   useEffect(() => {
     if (!headerRef.current) return;
     setSearchTop(headerRef.current.getBoundingClientRect().bottom);
   }, []);
 
-  // Lock body scroll when mobile search open
+  // lock body scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
@@ -114,9 +115,10 @@ export default function Header() {
       ref={headerRef}
       className="relative z-40 bg-white border-b shadow-md px-4 md:px-6 py-3"
     >
-      {/* Single responsive bar (no separate mobile/desktop bars) */}
-      <div className="grid grid-cols-3 items-center">
-        {/* Left: mobile search icon (hidden on md+) */}
+      {/* One responsive bar (no separate mobile/desktop bars) */}
+      {/* Desktop grid is 1fr | auto | 1fr so the center column hugs the logo and stays truly centered */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
+        {/* Left column: mobile search icon (hidden on md+) */}
         <div className="justify-self-start">
           <button
             className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800"
@@ -130,7 +132,7 @@ export default function Header() {
           </button>
         </div>
 
-        {/* Center: logo (always centered) */}
+        {/* Center column: logo (always centered because column is 'auto' and grid is 1fr/auto/1fr) */}
         <div className="justify-self-center">
           <Link href="/" aria-label="DIY HQ Home" className="block">
             <Image
@@ -144,19 +146,18 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* Right: desktop search + categories */}
-        <div className="justify-self-end flex items-center gap-3 min-w-0">
-          <div className="hidden md:block min-w-0">
-            {/* keep desktop search from ballooning */}
-            <div className="w-full max-w-xl">
-              <SearchBox />
-            </div>
+        {/* Right column: nested grid so Search is centered in the right half and Categories is hard-right */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 min-w-0">
+          {/* Search occupies the left track of the right half; we center it within that track */}
+          <div className="hidden md:block min-w-0 justify-self-center w-full max-w-xl">
+            <SearchBox />
           </div>
 
+          {/* Categories flush right */}
           <button
             ref={menuBtnRef}
             onClick={toggleMenu}
-            className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
+            className="justify-self-end flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-controls="site-categories-menu"
@@ -169,7 +170,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Portals: Categories menu */}
+      {/* Categories menu (portal, overlaps everything) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -194,7 +195,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* Portals: Mobile search panel (below the header) */}
+      {/* Mobile search panel (appears below the header) */}
       {mounted && searchOpen &&
         createPortal(
           <>
