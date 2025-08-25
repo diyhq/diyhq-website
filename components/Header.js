@@ -10,13 +10,13 @@ const MENU_W = 224; // Tailwind w-56 (14rem)
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories (right) menu
+  // Categories (right) menu state
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search panel
+  // Mobile search panel state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
@@ -24,7 +24,7 @@ export default function Header() {
 
   useEffect(() => setMounted(true), []);
 
-  // --- position the Categories menu (portal) ---
+  // ---- Position Categories portal
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -44,7 +44,7 @@ export default function Header() {
     });
   };
 
-  // --- listeners / layout helpers ---
+  // ---- Global listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
@@ -115,10 +115,9 @@ export default function Header() {
       ref={headerRef}
       className="relative z-40 bg-white border-b shadow-md px-4 md:px-6 py-3"
     >
-      {/* One responsive bar (no separate mobile/desktop bars) */}
-      {/* Desktop grid is 1fr | auto | 1fr so the center column hugs the logo and stays truly centered */}
+      {/* One responsive bar. Desktop grid: 1fr | auto | 1fr (center column hugs the logo, truly centered). */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
-        {/* Left column: mobile search icon (hidden on md+) */}
+        {/* Left column: mobile search icon */}
         <div className="justify-self-start">
           <button
             className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800"
@@ -132,7 +131,7 @@ export default function Header() {
           </button>
         </div>
 
-        {/* Center column: logo (always centered because column is 'auto' and grid is 1fr/auto/1fr) */}
+        {/* Center column: Logo (auto width => perfectly centered) */}
         <div className="justify-self-center">
           <Link href="/" aria-label="DIY HQ Home" className="block">
             <Image
@@ -146,14 +145,16 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* Right column: nested grid so Search is centered in the right half and Categories is hard-right */}
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 min-w-0">
-          {/* Search occupies the left track of the right half; we center it within that track */}
-          <div className="hidden md:block min-w-0 justify-self-center w-full max-w-xl">
-            <SearchBox />
+        {/* Right column (FULL WIDTH): Search centered in left track, Categories flush-right */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 w-full justify-self-stretch min-w-0">
+          {/* Desktop search occupies left track and is centered within that track */}
+          <div className="hidden md:flex w-full justify-center min-w-0">
+            <div className="w-full max-w-xl min-w-0">
+              <SearchBox />
+            </div>
           </div>
 
-          {/* Categories flush right */}
+          {/* Categories pinned to the inside of the right edge */}
           <button
             ref={menuBtnRef}
             onClick={toggleMenu}
@@ -170,7 +171,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Categories menu (portal, overlaps everything) */}
+      {/* Categories dropdown (portal, overlaps all) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -195,7 +196,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel (appears below the header) */}
+      {/* Mobile search panel (beneath header) */}
       {mounted && searchOpen &&
         createPortal(
           <>
