@@ -5,15 +5,18 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // Tailwind w-56
+const MENU_W = 224; // Tailwind w-56 (14rem)
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
+
+  // Categories (right) menu state
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
+  // Mobile search panel state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
@@ -21,6 +24,7 @@ export default function Header() {
 
   useEffect(() => setMounted(true), []);
 
+  // ---- Position Categories portal
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -32,7 +36,6 @@ export default function Header() {
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
-
   const toggleMenu = () => {
     setMenuOpen((v) => {
       const next = !v;
@@ -41,16 +44,15 @@ export default function Header() {
     });
   };
 
+  // ---- Global listeners
   useEffect(() => {
     const onDocClick = (e) => {
-      if (
-        menuOpen &&
-        menuRef.current &&
-        menuBtnRef.current &&
-        !menuRef.current.contains(e.target) &&
-        !menuBtnRef.current.contains(e.target)
-      ) {
-        setMenuOpen(false);
+      const menuEl = menuRef.current;
+      const btnEl = menuBtnRef.current;
+      if (menuOpen && menuEl && btnEl) {
+        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) {
+          setMenuOpen(false);
+        }
       }
     };
     const onKey = (e) => {
@@ -62,9 +64,11 @@ export default function Header() {
     const onScrollResize = () => {
       if (menuOpen) calcMenuPosition();
       if (headerRef.current) {
-        setSearchTop(headerRef.current.getBoundingClientRect().bottom);
+        const r = headerRef.current.getBoundingClientRect();
+        setSearchTop(r.bottom);
       }
     };
+
     document.addEventListener("mousedown", onDocClick);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScrollResize, { passive: true });
@@ -77,11 +81,13 @@ export default function Header() {
     };
   }, [menuOpen]);
 
+  // initial mobile search offset
   useEffect(() => {
     if (!headerRef.current) return;
     setSearchTop(headerRef.current.getBoundingClientRect().bottom);
   }, []);
 
+  // lock body scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
@@ -111,27 +117,11 @@ export default function Header() {
       ref={headerRef}
       className="relative z-40 bg-white border-b shadow-md px-4 md:px-6 py-3"
     >
-      {/* GRID: left logo | center search | right categories */}
-      <div className="grid grid-cols-3 items-center w-full">
-        {/* Left: logo (desktop), search icon (mobile) */}
-        <div className="flex items-center justify-start">
-          <button
-            className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800 mr-2"
-            aria-label="Open search"
-            onClick={() => setSearchOpen(true)}
-          >
-            <svg
-              className="h-6 w-6"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="7"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-          </button>
-          <Link href="/" aria-label="DIY HQ Home" className="hidden md:block">
+      {/* GRID: logo-left | search-center | categories-right */}
+      <div className="grid grid-cols-[auto_1fr_auto] items-center w-full">
+        {/* Left: Logo */}
+        <div className="flex items-center">
+          <Link href="/" aria-label="DIY HQ Home" className="block">
             <Image
               src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
               alt="DIY HQ Logo"
@@ -143,14 +133,14 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* Center: search (desktop) */}
-        <div className="hidden md:flex justify-center">
+        {/* Center: Search */}
+        <div className="hidden md:flex justify-center w-full">
           <div className="w-full max-w-xl">
             <SearchBox />
           </div>
         </div>
 
-        {/* Right: categories */}
+        {/* Right: Categories (flush to far right) */}
         <div className="flex justify-end">
           <button
             ref={menuBtnRef}
@@ -179,7 +169,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Categories dropdown */}
+      {/* Categories dropdown (portal, overlaps all) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -204,7 +194,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel */}
+      {/* Mobile search panel (beneath header) */}
       {mounted && searchOpen &&
         createPortal(
           <>
