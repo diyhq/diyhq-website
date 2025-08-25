@@ -5,60 +5,56 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // Tailwind w-56 (14rem)
+const MENU_W = 224; // w-56
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories menu state
+  // Categories menu
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search state
+  // Mobile search
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
   const headerRef = useRef(null);
+
   useEffect(() => setMounted(true), []);
 
-  // --- Position portal dropdown next to the button
+  // Position categories dropdown (portal)
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
-    const rect = menuBtnRef.current.getBoundingClientRect();
+    const r = menuBtnRef.current.getBoundingClientRect();
     const gap = 8;
     const left = Math.min(
-      Math.max(8, rect.right - MENU_W),
+      Math.max(8, r.right - MENU_W),
       window.innerWidth - MENU_W - 8
     );
-    const top = rect.bottom + gap;
+    const top = r.bottom + gap;
     setMenuPos({ top, left });
   }
   const toggleMenu = () => {
-    setMenuOpen((v) => {
-      const next = !v;
-      if (next) calcMenuPosition();
-      return next;
+    setMenuOpen(v => {
+      const n = !v;
+      if (n) calcMenuPosition();
+      return n;
     });
   };
 
-  // --- Global listeners
+  // Global listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
       const btnEl  = menuBtnRef.current;
       if (menuOpen && menuEl && btnEl) {
-        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) {
-          setMenuOpen(false);
-        }
+        if (!menuEl.contains(e.target) && !btnEl.contains(e.target)) setMenuOpen(false);
       }
     };
     const onKey = (e) => {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        setSearchOpen(false);
-      }
+      if (e.key === "Escape") { setMenuOpen(false); setSearchOpen(false); }
     };
     const onScrollResize = () => {
       if (menuOpen) calcMenuPosition();
@@ -80,14 +76,14 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // initial offset for the mobile search sheet
+  // Initial mobile search offset
   useEffect(() => {
     if (headerRef.current) {
       setSearchTop(headerRef.current.getBoundingClientRect().bottom);
     }
   }, []);
 
-  // lock body scroll when mobile search is open
+  // Lock body scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
@@ -112,7 +108,7 @@ export default function Header() {
 
   return (
     <>
-      {/* Full‑bleed header: breaks out of any parent .container */}
+      {/* FULL‑BLEED HEADER (escapes parent containers) */}
       <header
         ref={headerRef}
         className="
@@ -120,9 +116,13 @@ export default function Header() {
           left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen
         "
       >
-        {/* Inner row with symmetric paddings */}
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 md:px-6 min-h-[64px]">
-          {/* Left: Logo + (mobile) search icon */}
+        {/* Inner row. Note: pr uses safe-area so the Categories button can go truly flush-right */}
+        <div className="
+          grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 min-h-[64px]
+          pl-[max(env(safe-area-inset-left),1rem)]
+          pr-[max(env(safe-area-inset-right),1rem)]
+        ">
+          {/* Logo + mobile search icon (left) */}
           <div className="flex items-center gap-2">
             <button
               className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-700"
@@ -147,14 +147,14 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Center: Search (desktop only) */}
+          {/* Search (desktop, centered in middle track) */}
           <div className="hidden md:flex justify-center min-w-0">
             <div className="w-full max-w-xl min-w-0">
               <SearchBox />
             </div>
           </div>
 
-          {/* Right: Categories — flush to far right */}
+          {/* Categories (flush to far right) */}
           <div className="justify-self-end">
             <button
               ref={menuBtnRef}
@@ -198,7 +198,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel (slides under header) */}
+      {/* Mobile search sheet */}
       {mounted && searchOpen &&
         createPortal(
           <>
