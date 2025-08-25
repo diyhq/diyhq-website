@@ -10,21 +10,20 @@ const MENU_W = 224; // Tailwind w-56 = 14rem
 export default function Header() {
   const [mounted, setMounted] = useState(false);
 
-  // Categories menu state
+  // Categories menu
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
-  // Mobile search state
+  // Mobile search
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
 
   const headerRef = useRef(null);
-
   useEffect(() => setMounted(true), []);
 
-  /* ---------- Position the categories menu (portal) ---------- */
+  // Position categories menu (portal)
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -36,7 +35,6 @@ export default function Header() {
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
-
   const toggleMenu = () => {
     setMenuOpen((v) => {
       const next = !v;
@@ -45,7 +43,7 @@ export default function Header() {
     });
   };
 
-  /* ---------- Global listeners ---------- */
+  // Listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
@@ -82,14 +80,13 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // Compute mobile search panel offset when header mounts/changes size
+  // Initial mobile search offset
   useEffect(() => {
     if (!headerRef.current) return;
-    const r = headerRef.current.getBoundingClientRect();
-    setSearchTop(r.bottom);
+    setSearchTop(headerRef.current.getBoundingClientRect().bottom);
   }, []);
 
-  // Lock body scroll when mobile search is open
+  // Lock body scroll when mobile search open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
@@ -99,59 +96,41 @@ export default function Header() {
     }
   }, [searchOpen, mounted]);
 
+  const categories = [
+    { title: "Home Repair", path: "/category/home-repair" },
+    { title: "Tools & Gear", path: "/category/tools-gear" },
+    { title: "Renovation", path: "/category/renovation" },
+    { title: "Yard & Garden", path: "/category/yard-garden" },
+    { title: "Smart Home", path: "/category/smart-home" },
+    { title: "Beginner Guides", path: "/category/beginner-guides" },
+    { title: "Automotive", path: "/category/automotive" },
+    { title: "Cleaning", path: "/category/cleaning" },
+    { title: "Organization", path: "/category/organization" },
+    { title: "Side Hustles", path: "/category/side-hustles" },
+  ];
+
   return (
     <header
       ref={headerRef}
       className="relative z-40 bg-white border-b shadow-md px-4 md:px-6 py-3"
     >
-      {/* ===================== MOBILE BAR ===================== */}
-      <div className="flex items-center justify-between md:hidden">
-        {/* Left: mobile search icon */}
-        <button
-          className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800"
-          aria-label="Open search"
-          onClick={() => setSearchOpen(true)}
-        >
-          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="7"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-        </button>
+      {/* Single responsive bar (no separate mobile/desktop bars) */}
+      <div className="grid grid-cols-3 items-center">
+        {/* Left: mobile search icon (hidden on md+) */}
+        <div className="justify-self-start">
+          <button
+            className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-800"
+            aria-label="Open search"
+            onClick={() => setSearchOpen(true)}
+          >
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
+        </div>
 
-        {/* Center: logo */}
-        <Link href="/" aria-label="DIY HQ Home" className="block">
-          <Image
-            src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
-            alt="DIY HQ Logo"
-            width={160}
-            height={80}
-            priority
-            className="object-contain"
-          />
-        </Link>
-
-        {/* Right: categories (hamburger) */}
-        <button
-          ref={menuBtnRef}
-          onClick={toggleMenu}
-          className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          aria-controls="site-categories-menu"
-        >
-          <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          <span>Categories</span>
-        </button>
-      </div>
-
-      {/* ===================== DESKTOP BAR ===================== */}
-      <div className="hidden md:grid grid-cols-[1fr_auto_1fr] items-center">
-        {/* Left column: intentionally empty */}
-        <div />
-
-        {/* Center column: perfectly centered logo */}
+        {/* Center: logo (always centered) */}
         <div className="justify-self-center">
           <Link href="/" aria-label="DIY HQ Home" className="block">
             <Image
@@ -165,11 +144,11 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* Right column: search then categories (far right) */}
+        {/* Right: desktop search + categories */}
         <div className="justify-self-end flex items-center gap-3 min-w-0">
           <div className="hidden md:block min-w-0">
-            {/* Constrain desktop search width so it sits nicely between logo and Categories */}
-            <div className="w-full max-w-[520px]">
+            {/* keep desktop search from ballooning */}
+            <div className="w-full max-w-xl">
               <SearchBox />
             </div>
           </div>
@@ -190,7 +169,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* ============ PORTALS: menu & mobile search ============ */}
+      {/* Portals: Categories menu */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -200,18 +179,7 @@ export default function Header() {
             className="fixed z-[100] w-56 bg-white border shadow-lg rounded-md py-2 max-h-[75vh] overflow-y-auto"
             style={{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }}
           >
-            {[
-              { title: "Home Repair", path: "/category/home-repair" },
-              { title: "Tools & Gear", path: "/category/tools-gear" },
-              { title: "Renovation", path: "/category/renovation" },
-              { title: "Yard & Garden", path: "/category/yard-garden" },
-              { title: "Smart Home", path: "/category/smart-home" },
-              { title: "Beginner Guides", path: "/category/beginner-guides" },
-              { title: "Automotive", path: "/category/automotive" },
-              { title: "Cleaning", path: "/category/cleaning" },
-              { title: "Organization", path: "/category/organization" },
-              { title: "Side Hustles", path: "/category/side-hustles" },
-            ].map((cat) => (
+            {categories.map((cat) => (
               <Link
                 key={cat.title}
                 href={cat.path}
@@ -226,6 +194,7 @@ export default function Header() {
           document.body
         )}
 
+      {/* Portals: Mobile search panel (below the header) */}
       {mounted && searchOpen &&
         createPortal(
           <>
