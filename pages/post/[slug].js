@@ -5,50 +5,30 @@ import Link from "next/link";
 import { PortableText } from "@portabletext/react";
 import SocialShareBar from "../../components/SocialShareBar.jsx";
 
+// AdSense only on post pages
+import AdSenseHead from "../../components/AdSenseHead.jsx";
+import AdSlot from "../../components/AdSlot.jsx";
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// TODO: Replace these with your real AdSense slot IDs (numbers as strings)
+const LEFT_SLOT  = "REPLACE_WITH_LEFT_SIDEBAR_SLOT_ID";   // e.g., "1234567890"
+const RIGHT_SLOT = "REPLACE_WITH_RIGHT_SIDEBAR_SLOT_ID";  // e.g., "0987654321"
+const INART_SLOT = "REPLACE_WITH_IN_ARTICLE_SLOT_ID";     // e.g., "1122334455"
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 /**
  * Pull everything we use; prefer normalized category ref with legacy fallback.
  */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
-  _id,
-  _createdAt,
-  title,
-  "slug": slug.current,
-  publishedAt,
-  excerpt,
-  seoTitle,
-  seoDescription,
-  estimatedTime,
-  estimatedCost,
-  readTime,
-  difficultyLevel,
-  authorAIName,
-  commentsEnabled,
-  updateLog,
-  featured,
-  "projectTags": projectTags[],
-  videoURL,
-  "affiliateLinks": affiliateLinks[],
-  "faq": faq[],
-  commonMistakes[],
-  safetyTips[],
-  "toolsNeeded": toolsNeeded[],
-  "materialsNeeded": materialsNeeded[],
-  "stepByStepInstructions": stepByStepInstructions[]{
-    ...,
-    title,
-    text,
-    image{asset->{url}, alt}
-  },
-  mainImage{
-    alt,
-    caption,
-    asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }
-  },
-  "category": coalesce(
-    category->{ _id, title, "slug": slug.current },
-    categories[0]->{ _id, title, "slug": slug.current }
-  ),
+  _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
+  estimatedTime,estimatedCost,readTime,difficultyLevel,authorAIName,commentsEnabled,updateLog,
+  featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[],
+  commonMistakes[],safetyTips[],"toolsNeeded": toolsNeeded[],"materialsNeeded": materialsNeeded[],
+  "stepByStepInstructions": stepByStepInstructions[]{...,title,text,image{asset->{url}, alt}},
+  mainImage{alt,caption,asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }},
+  "category": coalesce(category->{ _id, title, "slug": slug.current },
+                       categories[0]->{ _id, title, "slug": slug.current }),
   author->{ _id, name, image{asset->{url}} },
   body
 }
@@ -60,30 +40,18 @@ const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`
 const NAV_QUERY = `
 {
   "prev": *[
-    _type == "post" &&
-    defined(slug.current) &&
+    _type == "post" && defined(slug.current) &&
     coalesce(category->slug.current, categories[0]->slug.current) == $category &&
     coalesce(publishedAt, _createdAt) < $date
   ] | order(coalesce(publishedAt, _createdAt) desc)[0]{
-    title,
-    "slug": slug.current,
-    difficultyLevel,
-    estimatedCost,
-    readTime,
-    mainImage{asset->{url}}
+    title,"slug": slug.current,difficultyLevel,estimatedCost,readTime,mainImage{asset->{url}}
   },
   "next": *[
-    _type == "post" &&
-    defined(slug.current) &&
+    _type == "post" && defined(slug.current) &&
     coalesce(category->slug.current, categories[0]->slug.current) == $category &&
     coalesce(publishedAt, _createdAt) > $date
   ] | order(coalesce(publishedAt, _createdAt) asc)[0]{
-    title,
-    "slug": slug.current,
-    difficultyLevel,
-    estimatedCost,
-    readTime,
-    mainImage{asset->{url}}
+    title,"slug": slug.current,difficultyLevel,estimatedCost,readTime,mainImage{asset->{url}}
   }
 }
 `;
@@ -127,11 +95,9 @@ const ptComponents = {
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
-  // Kill legacy artifacts like "function anchor() [native code]" or variants.
   t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
   t = t.replace(/\bfunction\s+anchor\b/gi, "");
   t = t.replace(/\[ ?native code ?\]/gi, "");
-  // Consolidate whitespace
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
@@ -158,14 +124,7 @@ function blockText(b) {
   return "";
 }
 
-/**
- * Strip the "Recommended Gear / Editor's Picks" section if there are NO affiliateLinks.
- * Heuristics:
- *  - Remove heading that mentions "recommended gear" or "editor's picks"
- *  - Remove follow-on paragraphs like "See our pick …" / "view on Amazon" / "affiliate code"
- *  - Remove "Disclosure: As an Amazon Associate …" lines
- * Stops removing when the next heading appears.
- */
+/** Remove "Recommended Gear" if no affiliate links */
 function stripRecommended(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
   if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
@@ -176,24 +135,17 @@ function stripRecommended(blocks, affiliateLinks) {
       b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
     const text = blockText(b).toLowerCase();
 
-    // start skipping at heading
     if (isHeading) {
-      if (
-        /recommended\s+gear/.test(text) ||
-        /editor'?s?\s+picks/.test(text) ||
-        /recommended\s+picks/.test(text)
-      ) {
+      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
         skipping = true;
-        return false; // drop this heading
+        return false;
       }
-      // If we were skipping, a new heading ends the skip and we KEEP this heading.
       if (skipping) skipping = false;
       return true;
     }
 
-    if (skipping) return false; // drop everything in that section
+    if (skipping) return false;
 
-    // drop individual "pick" lines even if there was no heading
     if (/^see our pick/i.test(text)) return false;
     if (/view on amazon/i.test(text)) return false;
     if (/affiliate code/i.test(text)) return false;
@@ -308,13 +260,7 @@ function NavCard({ label, item }) {
       className="group grid grid-cols-[4rem,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
     >
       {thumb ? (
-        <Image
-          src={thumb}
-          alt=""
-          width={64}
-          height={64}
-          className="h-16 w-16 rounded object-cover"
-        />
+        <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
       ) : (
         <div className="h-16 w-16 rounded bg-gray-100" />
       )}
@@ -333,6 +279,31 @@ function NavCard({ label, item }) {
   );
 }
 
+/* ---------- Step 6 helpers: inject an inline ad block after Nth block ---------- */
+function insertInlineAd(blocks, index = 3) {
+  if (!Array.isArray(blocks)) return blocks;
+  const out = [...blocks];
+  const i = Math.min(Math.max(index, 1), out.length);
+  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
+  return out;
+}
+
+const ptComponentsWithAd = {
+  ...ptComponents,
+  types: {
+    adMarker: () => (
+      <div className="my-8">
+        <AdSlot
+          slot={INART_SLOT}
+          layout="in-article"
+          format="fluid"
+          style={{ display: 'block', textAlign: 'center' }}
+        />
+      </div>
+    ),
+  },
+};
+
 /* ---------------- Page ---------------- */
 export default function PostPage({ post, nav }) {
   if (!post) {
@@ -348,37 +319,16 @@ export default function PostPage({ post, nav }) {
   }
 
   const {
-    title,
-    excerpt,
-    seoTitle,
-    seoDescription,
-    publishedAt,
-    _createdAt,
-    category,
-    mainImage,
-    body,
-    author,
-    difficultyLevel,
-    estimatedTime,
-    estimatedCost,
-    projectTags,
-    toolsNeeded,
-    materialsNeeded,
-    safetyTips,
-    stepByStepInstructions,
-    commonMistakes,
-    videoURL,
-    affiliateLinks,
-    faq,
-    authorAIName,
+    title, excerpt, seoTitle, seoDescription, publishedAt, _createdAt, category, mainImage, body,
+    author, difficultyLevel, estimatedTime, estimatedCost, projectTags, toolsNeeded, materialsNeeded,
+    safetyTips, stepByStepInstructions, commonMistakes, videoURL, affiliateLinks, faq, authorAIName,
   } = post;
 
   const slug = post.slug;
   const displayTitle = title || "Untitled Post";
   const metaTitle = seoTitle || displayTitle;
   const metaDesc =
-    seoDescription ||
-    (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
+    seoDescription || (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
   const imageUrl = mainImage?.asset?.url || null;
   const imageAlt = mainImage?.alt || displayTitle;
   const caption = mainImage?.caption || mainImage?.alt || null;
@@ -387,10 +337,7 @@ export default function PostPage({ post, nav }) {
   const readMins = estimateReadMinutes(post);
   const costText = toCurrency(estimatedCost);
 
-  // Canonical URL for share + SEO
   const canonicalUrl = `https://www.doityourselfhq.com/post/${slug}`;
-
-  // JSON-LD
   const articleLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -404,15 +351,9 @@ export default function PostPage({ post, nav }) {
   };
 
   const hasTopSafety = Array.isArray(safetyTips) && safetyTips.length > 0;
-
-  // Filter out empty steps (no title, no text, no image)
   const steps = Array.isArray(stepByStepInstructions)
-    ? stepByStepInstructions.filter(
-        (s) => asString(s?.title) || asString(s?.text) || s?.image?.asset?.url
-      )
+    ? stepByStepInstructions.filter((s) => asString(s?.title) || asString(s?.text) || s?.image?.asset?.url)
     : [];
-
-  // FAQ visibility: show only if at least one answer is present
   const faqWithAnswers =
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
@@ -434,214 +375,234 @@ export default function PostPage({ post, nav }) {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
       </Head>
 
-      <article className="max-w-3xl mx-auto px-4 py-10">
-        {/* Title (plain, no box) */}
-        <header className="mb-4">
-          <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
-        </header>
+      {/* Load AdSense only on post pages */}
+      <AdSenseHead />
 
-        {/* Hero */}
-        {imageUrl ? (
-          <figure className="mb-2">
-            <Image
-              src={imageUrl}
-              alt={imageAlt}
-              width={1200}
-              height={630}
-              className="w-full h-auto rounded-xl"
-              priority
-            />
-            {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
-          </figure>
-        ) : (
-          <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
-            No image provided
-          </div>
-        )}
+      {/* OUTER CONTAINER + GRID: [left ads | content | right ads] on xl+ */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_300px] gap-8">
 
-        {/* Meta row under hero */}
-        <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-            {kv("Author", author?.name || authorAIName)}
-            {kv("Skill Level", difficultyLevel)}
-            {kv("Read Time", readMins ? `${readMins} min` : null)}
-            {kv("Estimated Cost", costText)}
-            {kv(
-              "Category",
-              category?.title && category?.slug ? (
-                <Link className="underline" href={`/category/${category.slug}`}>
-                  {category.title}
-                </Link>
-              ) : null
-            )}
-            {kv("Published", dateText)}
-          </div>
-        </section>
+          {/* LEFT SIDEBAR (hidden on < xl) */}
+          <aside className="hidden xl:block">
+            <div className="sticky top-24">
+              <AdSlot
+                slot={LEFT_SLOT}
+                format="auto"
+                style={{ display: 'block', width: 300, minHeight: 250 }}
+              />
+            </div>
+          </aside>
 
-        {/* Share bar (your component) */}
-        <div className="mb-6">
-          <SocialShareBar url={canonicalUrl} title={displayTitle} media={imageUrl || ""} />
-        </div>
+          {/* MAIN CONTENT */}
+          <main>
+            <article className="mx-auto py-10">
+              {/* Title */}
+              <header className="mb-4">
+                <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
+              </header>
 
-        {/* Excerpt */}
-        {typeof excerpt === "string" && excerpt.length > 0 && (
-          <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
-        )}
+              {/* Hero */}
+              {imageUrl ? (
+                <figure className="mb-2">
+                  <Image
+                    src={imageUrl}
+                    alt={imageAlt}
+                    width={1200}
+                    height={630}
+                    className="w-full h-auto rounded-xl"
+                    priority
+                  />
+                  {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
+                </figure>
+              ) : (
+                <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
+                  No image provided
+                </div>
+              )}
 
-        {/* Tools / Materials / Safety (3 columns on large) */}
-        {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
-        (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ||
-        hasTopSafety ? (
-          <section className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
-                <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                  {toolsNeeded.map((t, i) => (
-                    <li key={i}>{asString(t)}</li>
-                  ))}
-                </ul>
+              {/* Meta row under hero */}
+              <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                  {kv("Author", author?.name || authorAIName)}
+                  {kv("Skill Level", difficultyLevel)}
+                  {kv("Read Time", readMins ? `${readMins} min` : null)}
+                  {kv("Estimated Cost", costText)}
+                  {kv(
+                    "Category",
+                    category?.title && category?.slug ? (
+                      <Link className="underline" href={`/category/${category.slug}`}>
+                        {category.title}
+                      </Link>
+                    ) : null
+                  )}
+                  {kv("Published", dateText)}
+                </div>
+              </section>
+
+              {/* Share bar */}
+              <div className="mb-6">
+                <SocialShareBar url={canonicalUrl} title={displayTitle} media={imageUrl || ""} />
               </div>
-            )}
-            {Array.isArray(materialsNeeded) && materialsNeeded.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Materials Needed</h2>
-                <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                  {materialsNeeded.map((m, i) => (
-                    <li key={i}>{asString(m)}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {hasTopSafety && (
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Safety Tips</h2>
-                <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                  {safetyTips.map((s, i) => (
-                    <li key={i}>{asString(s)}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-        ) : null}
 
-        {/* Body */}
-        {Array.isArray(body) ? (
-          <div className="prose lg:prose-lg max-w-none">
-            <PortableText value={body} components={ptComponents} />
-          </div>
-        ) : typeof body === "string" && body.trim().length > 0 ? (
-          <StringBody text={body} />
-        ) : (
-          <p className="opacity-70">This article hasn’t been populated with content yet.</p>
-        )}
+              {/* Excerpt */}
+              {typeof excerpt === "string" && excerpt.length > 0 && (
+                <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
+              )}
 
-        {/* Video */}
-        {maybeEmbed(videoURL)}
+              {/* Tools / Materials / Safety */}
+              {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
+               (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ||
+               hasTopSafety ? (
+                <section className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
+                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
+                        {toolsNeeded.map((t, i) => (<li key={i}>{asString(t)}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                  {Array.isArray(materialsNeeded) && materialsNeeded.length > 0 && (
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">Materials Needed</h2>
+                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
+                        {materialsNeeded.map((m, i) => (<li key={i}>{asString(m)}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                  {hasTopSafety && (
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">Safety Tips</h2>
+                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
+                        {safetyTips.map((s, i) => (<li key={i}>{asString(s)}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                </section>
+              ) : null}
 
-        {/* Step-by-step (only if at least one populated item) */}
-        {steps.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
-            <ol className="list-decimal pl-6 space-y-6">
-              {steps.map((s, i) => {
-                const stepText = asString(s?.text) || asString(s);
-                const stepTitle = s?.title ? String(s.title) : null;
-                const stepImage = s?.image?.asset?.url || null;
-                const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
-                return (
-                  <li key={i}>
-                    {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
-                    {stepText && <p className="mb-3">{stepText}</p>}
-                    {stepImage && (
-                      <Image
-                        src={stepImage}
-                        alt={stepAlt}
-                        width={1200}
-                        height={675}
-                        className="rounded-lg mt-2"
-                      />
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        )}
+              {/* Body with inline in-article ad after the 3rd block */}
+              {Array.isArray(body) ? (
+                <div className="prose lg:prose-lg max-w-none">
+                  <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
+                </div>
+              ) : typeof body === "string" && body.trim().length > 0 ? (
+                <StringBody text={body} />
+              ) : (
+                <p className="opacity-70">This article hasn’t been populated with content yet.</p>
+              )}
 
-        {/* Common Mistakes */}
-        {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              {commonMistakes.map((c, i) => (
-                <li key={i}>{asString(c)}</li>
-              ))}
-            </ul>
-          </section>
-        )}
+              {/* Video */}
+              {maybeEmbed(videoURL)}
 
-        {/* FAQ — only if answers present, expanded */}
-        {showFaq && (
-          <section className="mt-10">
-            <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
-            <div className="space-y-6">
-              {faqWithAnswers.map((f, i) => {
-                const q = f?.question || f?.q || `Question ${i + 1}`;
-                const a = f?.answer || f?.a || "";
-                return (
-                  <div key={i} className="rounded-lg border p-4">
-                    <div className="font-medium">{q}</div>
-                    {a ? <p className="mt-2">{a}</p> : null}
+              {/* Step-by-step */}
+              {steps.length > 0 && (
+                <section className="mt-10">
+                  <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
+                  <ol className="list-decimal pl-6 space-y-6">
+                    {steps.map((s, i) => {
+                      const stepText = asString(s?.text) || asString(s);
+                      const stepTitle = s?.title ? String(s.title) : null;
+                      const stepImage = s?.image?.asset?.url || null;
+                      const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
+                      return (
+                        <li key={i}>
+                          {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
+                          {stepText && <p className="mb-3">{stepText}</p>}
+                          {stepImage && (
+                            <Image src={stepImage} alt={stepAlt} width={1200} height={675} className="rounded-lg mt-2" />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
+              )}
+
+              {/* Common Mistakes */}
+              {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
+                <section className="mt-10">
+                  <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
+                  <ul className="list-disc pl-6 space-y-2">
+                    {commonMistakes.map((c, i) => (<li key={i}>{asString(c)}</li>))}
+                  </ul>
+                </section>
+              )}
+
+              {/* FAQ */}
+              {showFaq && (
+                <section className="mt-10">
+                  <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
+                  <div className="space-y-6">
+                    {faqWithAnswers.map((f, i) => {
+                      const q = f?.question || f?.q || `Question ${i + 1}`;
+                      const a = f?.answer || f?.a || "";
+                      return (
+                        <div key={i} className="rounded-lg border p-4">
+                          <div className="font-medium">{q}</div>
+                          {a ? <p className="mt-2">{a}</p> : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
+                </section>
+              )}
 
-        {/* Prev / Next — 2 columns even on phones */}
-        {(nav?.prev || nav?.next) && (
-          <section className="mt-12 border-t pt-8">
-            <h2 className="text-xl font-semibold mb-4">
-              More in {category?.title || "DIY HQ"}
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              <NavCard label="Previous" item={nav.prev} />
-              <NavCard label="Next" item={nav.next} />
-            </div>
-          </section>
-        )}
+              {/* Prev / Next */}
+              {(nav?.prev || nav?.next) && (
+                <section className="mt-12 border-t pt-8">
+                  <h2 className="text-xl font-semibold mb-4">
+                    More in {category?.title || "DIY HQ"}
+                  </h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NavCard label="Previous" item={nav.prev} />
+                    <NavCard label="Next" item={nav.next} />
+                  </div>
+                </section>
+              )}
 
-        {/* Tags */}
-        {Array.isArray(projectTags) && projectTags.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-2xl font-semibold mb-3">Tags</h2>
-            <div className="flex flex-wrap gap-2">
-              {projectTags.map((t, i) => (
-                <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
-                  {asString(t)}
-                </span>
-              ))}
-            </div>
-          </section>
-        )}
+              {/* Tags */}
+              {Array.isArray(projectTags) && projectTags.length > 0 && (
+                <section className="mt-10">
+                  <h2 className="text-2xl font-semibold mb-3">Tags</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {projectTags.map((t, i) => (
+                      <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
+                        {asString(t)}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-        {/* Footer nav */}
-        <footer className="mt-12 flex items-center justify-between">
-          {category?.slug ? (
-            <Link className="text-blue-600 underline" href={`/category/${category.slug}`}>
-              ← Back to {category.title}
-            </Link>
-          ) : (
-            <Link className="text-blue-600 underline" href="/">
-              ← Back to Home
-            </Link>
-          )}
-          <div id="share-toolbar" className="opacity-60 text-sm" />
-        </footer>
-      </article>
+              {/* Footer nav */}
+              <footer className="mt-12 flex items-center justify-between">
+                {category?.slug ? (
+                  <Link className="text-blue-600 underline" href={`/category/${category.slug}`}>
+                    ← Back to {category.title}
+                  </Link>
+                ) : (
+                  <Link className="text-blue-600 underline" href="/">
+                    ← Back to Home
+                  </Link>
+                )}
+                <div id="share-toolbar" className="opacity-60 text-sm" />
+              </footer>
+            </article>
+          </main>
+
+          {/* RIGHT SIDEBAR (hidden on < xl) */}
+          <aside className="hidden xl:block">
+            <div className="sticky top-24">
+              <AdSlot
+                slot={RIGHT_SLOT}
+                format="auto"
+                style={{ display: 'block', width: 300, minHeight: 250 }}
+              />
+            </div>
+          </aside>
+        </div>
+      </div>
     </>
   );
 }
@@ -653,46 +614,33 @@ export async function getStaticProps({ params }) {
     const raw = await client.fetch(POST_QUERY, { slug: params.slug });
     if (!raw) return { notFound: true, revalidate: 60 };
 
-    // Sanitize legacy artifacts across PT + strings
     const post = { ...raw };
     if (Array.isArray(post.body)) post.body = sanitizePortableText(post.body);
     if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
     if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
-    ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach(
-      (k) => {
-        if (Array.isArray(post[k])) {
-          post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
-        }
-      }
-    );
+    ["toolsNeeded","materialsNeeded","safetyTips","commonMistakes","projectTags"].forEach((k) => {
+      if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
+    });
     if (Array.isArray(post.stepByStepInstructions)) {
       post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
-        ...s,
-        title: sanitizePlainText(asString(s?.title)),
-        text: sanitizePlainText(asString(s?.text)),
+        ...s, title: sanitizePlainText(asString(s?.title)), text: sanitizePlainText(asString(s?.text)),
       }));
     }
     if (Array.isArray(post.faq)) {
       post.faq = post.faq.map((f) =>
         typeof f === "object"
-          ? {
-              ...f,
-              question: sanitizePlainText(asString(f?.question || f?.q)),
-              answer: sanitizePlainText(asString(f?.answer || f?.a)),
-            }
+          ? { ...f, question: sanitizePlainText(asString(f?.question || f?.q)),
+                    answer: sanitizePlainText(asString(f?.answer || f?.a)) }
           : sanitizePlainText(asString(f))
       );
     }
 
-    // NEW: strip "Recommended Gear" body section if there are no affiliate links
-    if (Array.isArray(post.body)) {
-      post.body = stripRecommended(post.body, post.affiliateLinks);
-    }
+    // strip "Recommended Gear" section when no affiliate links
+    if (Array.isArray(post.body)) post.body = stripRecommended(post.body, post.affiliateLinks);
 
-    // Prev/Next only if we have a category
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
-    const cat = post?.category?.slug || null;
+    const cat  = post?.category?.slug || null;
     if (date && cat) nav = await client.fetch(NAV_QUERY, { date, category: cat });
 
     return { props: { post, nav }, revalidate: 60 };
@@ -705,10 +653,7 @@ export async function getStaticPaths() {
   try {
     const { client } = await import("../../lib/sanity.client");
     const slugs = await client.fetch(SLUGS_QUERY);
-    return {
-      paths: (slugs || []).map((s) => ({ params: { slug: s } })),
-      fallback: "blocking",
-    };
+    return { paths: (slugs || []).map((s) => ({ params: { slug: s } })), fallback: "blocking" };
   } catch {
     return { paths: [], fallback: "blocking" };
   }

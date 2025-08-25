@@ -1,43 +1,35 @@
-// components/AdSlot.jsx
-import { useEffect } from 'react';
+'use client';
+import { useEffect, useRef } from 'react';
 
-/**
- * Generic AdSense slot
- * - slot: required numeric ad-slot (from AdSense ad unit) — for Auto ads, leave out and AdSense will place automatically
- * - format: "auto" (Display), or "fluid" (In-article)
- * - style: provide minHeight to avoid CLS (e.g., 90px for top banner)
- */
 export default function AdSlot({
-  slot,                           // e.g., "1234567890"
-  format = 'auto',                // 'auto' (Display) or 'fluid' (In-article)
-  responsive = 'true',            // 'true' enables responsive auto-sizing
-  layoutKey,                      // required only for some "fluid" formats AdSense gives you
-  style,                          // { display:'block', minHeight: 90 }
+  slot,                  // required (your numeric slot id)
+  format = 'auto',       // 'auto' for display, 'fluid' for in-article
+  layout,                // 'in-article' for in-article units
+  style,
   className,
 }) {
-  useEffect(() => {
-    try {
-      // Ask AdSense to render this slot
-      if (typeof window !== 'undefined') {
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-      }
-    } catch (e) {
-      // no-op
-    }
-  }, []);
+  const ref = useRef(null);
 
-  const isProd = process.env.NODE_ENV === 'production';
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const done = el.getAttribute('data-adsbygoogle-status') === 'done';
+    if (done) return;
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch {}
+  }, [slot]);
 
   return (
     <ins
+      ref={ref}
       className={`adsbygoogle ${className || ''}`}
       style={style || { display: 'block' }}
-      data-ad-client={process.env.NEXT_PUBLIC_ADSENSE_PUB_ID}
-      {...(slot ? { 'data-ad-slot': slot } : {})}
-      data-ad-format={format}
-      data-full-width-responsive={responsive}
-      {...(layoutKey ? { 'data-ad-layout-key': layoutKey } : {})}
-      {...(!isProd ? { 'data-adtest': 'on' } : {})} // test mode on localhost/preview
+      data-ad-client={process.env.NEXT_PUBLIC_ADSENSE_CLIENT}
+      data-ad-slot={slot}
+      {...(layout ? { 'data-ad-layout': layout } : {})}
+      {...(format ? { 'data-ad-format': format } : {})}
+      data-full-width-responsive="true"
     />
   );
 }
