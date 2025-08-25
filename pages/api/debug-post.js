@@ -1,10 +1,15 @@
 // pages/api/debug-post.js
-import { client } from "../../lib/sanity.client";
+// Test locally:  http://localhost:3000/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
+// Test on prod:  https://www.doityourselfhq.com/api/debug-post?slug=easy-diy-garage-upgrades-for-automotive-diy-that-actually-work-fall-august
+
+import { client } from "@/lib/sanity.client";
 
 export default async function handler(req, res) {
   try {
     const { slug } = req.query;
-    if (!slug) return res.status(400).json({ ok: false, error: "Missing ?slug" });
+    if (!slug) {
+      return res.status(400).json({ ok: false, error: "Missing ?slug" });
+    }
 
     const query = `
       *[_type == "post" && slug.current == $slug][0]{
@@ -29,9 +34,7 @@ export default async function handler(req, res) {
             null
           )
         ),
-        // Body may be missing or empty; we just return it raw to inspect
         body,
-        // A few of your extended fields (optional)
         difficultyLevel,
         toolsNeeded,
         materialsNeeded,
@@ -41,9 +44,9 @@ export default async function handler(req, res) {
     `;
 
     const post = await client.fetch(query, { slug });
-    res.status(200).json({ ok: true, slug, post });
+    return res.status(200).json({ ok: true, slug, post });
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       ok: false,
       message: err.message,
       stack: (err.stack || "").split("\n").slice(0, 6).join("\n"),
