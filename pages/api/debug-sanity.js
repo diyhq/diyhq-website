@@ -1,22 +1,17 @@
 // pages/api/debug-sanity.js
-import { getServerClient, sanityConfig, hasSanityConfig } from '../../lib/sanity';
+import { client } from "../../lib/sanity.client";
 
 export default async function handler(req, res) {
   try {
-    const client = getServerClient();
-    const count = await client.fetch('count(*[_type == "post" && !defined(hidden) || hidden == false])');
+    // Simple ping + one doc probe to verify connectivity
+    const countPosts = await client.fetch('count(*[_type == "post"])');
+    const one = await client.fetch('*[_type == "post"][0]{ _id, "slug": slug.current }');
     res.status(200).json({
       ok: true,
-      hasSanityConfig,
-      sanityConfig,
-      count,
+      countPosts,
+      sample: one || null,
     });
-  } catch (e) {
-    res.status(500).json({
-      ok: false,
-      hasSanityConfig,
-      sanityConfig,
-      error: String(e?.message || e),
-    });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
   }
 }

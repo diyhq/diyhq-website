@@ -19,13 +19,8 @@ const POST_QUERY = `
     asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }
   },
   "category": coalesce(
-    category->{
-      _id, title, "slug": slug.current
-    },
-    select(
-      defined(categories) && count(categories) > 0 => categories[0]->{ _id, title, "slug": slug.current },
-      null
-    )
+    category->{ _id, title, "slug": slug.current },
+    categories[0]->{ _id, title, "slug": slug.current }
   ),
   author->{ _id, name, image{asset->{url}} },
   body,
@@ -142,6 +137,7 @@ export default function PostPage({ post }) {
 // ---------- Data fetching ----------
 export async function getStaticProps({ params }) {
   try {
+    // dynamic import keeps hardcoded token server-only
     const { client } = await import("../../lib/sanity.client");
     const post = await client.fetch(POST_QUERY, { slug: params.slug });
     if (!post) return { notFound: true, revalidate: 60 };

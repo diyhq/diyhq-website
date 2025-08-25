@@ -22,14 +22,10 @@ export default async function handler(req, res) {
           alt,
           asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }
         },
+        // Prefer normalized single ref 'category', then legacy 'categories[0]'
         "category": coalesce(
-          category->{
-            _id, title, "slug": slug.current
-          },
-          select(defined(categories) && count(categories) > 0,
-            categories[0]->{ _id, title, "slug": slug.current },
-            null
-          )
+          category->{ _id, title, "slug": slug.current },
+          categories[0]->{ _id, title, "slug": slug.current }
         ),
         body,
         difficultyLevel,
