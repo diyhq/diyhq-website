@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // Tailwind w-56 (14rem)
+const MENU_W = 224; // Tailwind w-56
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
@@ -19,11 +19,11 @@ export default function Header() {
   // Mobile search
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTop, setSearchTop] = useState(0);
-
   const headerRef = useRef(null);
+
   useEffect(() => setMounted(true), []);
 
-  // Position the dropdown next to the button
+  // Position the portal dropdown
   function calcMenuPosition() {
     if (!menuBtnRef.current || typeof window === "undefined") return;
     const rect = menuBtnRef.current.getBoundingClientRect();
@@ -43,7 +43,7 @@ export default function Header() {
     });
   };
 
-  // Global listeners
+  // Listeners
   useEffect(() => {
     const onDocClick = (e) => {
       const menuEl = menuRef.current;
@@ -67,7 +67,6 @@ export default function Header() {
         setSearchTop(r.bottom);
       }
     };
-
     document.addEventListener("mousedown", onDocClick);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScrollResize, { passive: true });
@@ -80,20 +79,18 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // initial offset for the mobile search sheet
   useEffect(() => {
     if (headerRef.current) {
       setSearchTop(headerRef.current.getBoundingClientRect().bottom);
     }
   }, []);
 
-  // lock scroll when mobile search is open
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
+      return () => (document.body.style.overflow = prev);
     }
   }, [searchOpen, mounted]);
 
@@ -112,16 +109,14 @@ export default function Header() {
 
   return (
     <>
-      {/* FIXED & FULL-BLEED HEADER */}
+      {/* Full‑bleed bar so "Categories" reaches the visual far right */}
       <header
         ref={headerRef}
-        className="
-          fixed top-0 inset-x-0 z-50 border-b bg-white/90 backdrop-blur
-        "
+        className="relative z-50 border-b bg-white/90 backdrop-blur left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen"
       >
-        {/* Inner row (three columns). Right padding is tiny so Categories hugs the right edge. */}
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 pl-3 pr-2 sm:pl-4 sm:pr-3 md:pl-6 md:pr-4 min-h-[64px]">
-          {/* Left: Logo + (mobile) search icon */}
+        {/* The row itself (no container width limit) */}
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 md:px-6 min-h-[64px] w-full">
+          {/* Left: mobile search + logo */}
           <div className="flex items-center gap-2">
             <button
               className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-700"
@@ -146,14 +141,14 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Center: Search (desktop only) */}
+          {/* Center: desktop search */}
           <div className="hidden md:flex justify-center min-w-0">
             <div className="w-full max-w-xl min-w-0">
               <SearchBox />
             </div>
           </div>
 
-          {/* Right: Categories (hard-right) */}
+          {/* Right: Categories — flush with viewport’s right padding */}
           <div className="justify-self-end">
             <button
               ref={menuBtnRef}
@@ -172,10 +167,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Spacer so content doesn’t sit under fixed header */}
-      <div aria-hidden="true" className="h-[66px] md:h-[68px]" />
-
-      {/* Categories dropdown (portal; overlaps everything) */}
+      {/* Categories dropdown (portal) */}
       {mounted && menuOpen &&
         createPortal(
           <div
@@ -200,7 +192,7 @@ export default function Header() {
           document.body
         )}
 
-      {/* Mobile search panel (slides under header) */}
+      {/* Mobile search sheet */}
       {mounted && searchOpen &&
         createPortal(
           <>

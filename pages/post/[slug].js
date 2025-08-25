@@ -10,21 +10,17 @@ import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-// TODO: Replace these with your real AdSense slot IDs once approved
-const LEFT_SLOT  = "XXXXXXXXXX";   // Display (left sidebar)
-const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
-const INART_SLOT = "ZZZZZZZZZZ";   // In-article
+const LEFT_SLOT  = "XXXXXXXXXX";
+const RIGHT_SLOT = "YYYYYYYYYY";
+const INART_SLOT = "ZZZZZZZZZZ";
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-/**
- * Pull everything we use; prefer normalized category ref with legacy fallback.
- */
+/* ---------------- Sanity queries ---------------- */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
   estimatedTime,estimatedCost,readTime,difficultyLevel,authorAIName,commentsEnabled,updateLog,
   featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[],
-
   commonMistakes[],safetyTips[],"toolsNeeded": toolsNeeded[],"materialsNeeded": materialsNeeded[],
   "stepByStepInstructions": stepByStepInstructions[]{...,title,text,image{asset->{url}, alt}},
   mainImage{alt,caption,asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }},
@@ -37,7 +33,6 @@ const POST_QUERY = `
 
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
 
-/** Prev/Next in same category by publishedAt (fallback _createdAt), including UI meta. */
 const NAV_QUERY = `
 {
   "prev": *[
@@ -80,7 +75,7 @@ const ptComponents = {
         <a
           href={href}
           target={external ? "_blank" : undefined}
-          rel={external ? "noopener noreferrer" : undefined}
+          rel={external ? "nofollow sponsored noopener noreferrer" : undefined}
           className="underline"
         >
           {children}
@@ -96,27 +91,36 @@ const ptComponents = {
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
+
+  // strip stray "native code" artifacts we saw
   t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
   t = t.replace(/\bfunction\s+anchor\b/gi, "");
   t = t.replace(/\[ ?native code ?\]/gi, "");
+
+  // trim “Compare options” / “See our pick …” boilerplate if it ever leaks in as plain text
+  t = t.replace(/^compare options:.*$/gim, "");
+  t = t.replace(/^see our pick.*$/gim, "");
+
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
 
 function sanitizePortableText(blocks) {
   if (!Array.isArray(blocks)) return blocks;
-  return blocks.map((b) => {
-    if (b && typeof b === "object") {
-      const out = { ...b };
-      if (Array.isArray(out.children)) {
-        out.children = out.children.map((c) =>
-          c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
-        );
+  return blocks
+    .map((b) => {
+      if (b && typeof b === "object") {
+        const out = { ...b };
+        if (Array.isArray(out.children)) {
+          out.children = out.children.map((c) =>
+            c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
+          );
+        }
+        return out;
       }
-      return out;
-    }
-    return b;
-  });
+      return b;
+    })
+    .filter(Boolean);
 }
 
 function blockText(b) {
@@ -125,43 +129,37 @@ function blockText(b) {
   return "";
 }
 
-/**
- * Remove "Recommended Gear / Editor's Picks" placeholders & redundant disclosures.
- * If affiliateLinks exist => always remove that entire section so you don’t get duplicates.
- */
+/** Remove “Recommended Gear / Editor’s Picks” and in‑body “Disclosure” stubs */
 function stripRecommended(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
 
-  // If you have affiliate links, we ALWAYS remove placeholder "recommended picks" + disclosure lines.
-  const haveAff = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
+  // If we *don’t* have affiliate links, strip the whole recommended section.
+  const hasLinks = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
 
   let skipping = false;
   return blocks.filter((b) => {
     const isHeading =
       b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
-    const text = blockText(b).toLowerCase();
+    const text = blockText(b).toLowerCase().trim();
 
-    // strip common “compare options” empty stubs
-    if (/^compare options.+/.test(text)) return false;
+    // drop “Disclosure: … amazon associate …” blocks (we’ll add one clean disclosure ourselves)
+    if (/^disclosure:.*amazon associate/i.test(text)) return false;
 
-    // strip redundant amazon disclosures in the body (we’ll render one clean disclosure ourselves)
-    if (/^disclosure:\s*as an amazon associate/i.test(text)) return false;
-
-    // begin removing “Recommended Gear / Editor’s Picks” section
-    if (isHeading && (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text))) {
-      skipping = true;
-      return false;
-    }
-    // end skipping when we hit the next heading
-    if (isHeading && skipping) {
-      skipping = false;
-      return true;
-    }
-    if (skipping) return false;
-
-    // If you DON'T have affiliate links but body includes the “see our pick…” generic lines,
-    // you can still strip those empty stubs:
+    // Remove placeholders if they leaked in:
     if (/^see our pick/i.test(text)) return false;
+    if (/^compare options/i.test(text)) return false;
+
+    if (!hasLinks) {
+      if (isHeading) {
+        if (/recommended\s+gear|editor'?s?\s+picks/i.test(text)) {
+          skipping = true;
+          return false;
+        }
+        if (skipping) skipping = false;
+        return true;
+      }
+      if (skipping) return false;
+    }
 
     return true;
   });
@@ -291,12 +289,12 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- Inline ad after 3rd block ---------- */
+/* ---------- inline ad after 3rd block ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
   const i = Math.min(Math.max(index, 1), out.length);
-  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
+  out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
   return out;
 }
 
@@ -309,7 +307,7 @@ const ptComponentsWithAd = {
           slot={INART_SLOT}
           layout="in-article"
           format="fluid"
-          style={{ display: 'block', textAlign: 'center' }}
+          style={{ display: "block", textAlign: "center" }}
         />
       </div>
     ),
@@ -348,6 +346,7 @@ export default function PostPage({ post, nav }) {
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
   const readMins = estimateReadMinutes(post);
   const costText = toCurrency(estimatedCost);
+  const showDisclosure = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
 
   const canonicalUrl = `https://www.doityourselfhq.com/post/${slug}`;
   const articleLd = {
@@ -370,8 +369,6 @@ export default function PostPage({ post, nav }) {
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
-  const haveAffiliate = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
-
   return (
     <>
       <Head>
@@ -389,10 +386,9 @@ export default function PostPage({ post, nav }) {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
       </Head>
 
-      {/* Load AdSense only on post pages */}
+      {/* AdSense only on post pages */}
       <AdSenseHead />
 
-      {/* OUTER CONTAINER + GRID: [250px ad | 900px article | 250px ad] */}
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
 
@@ -410,32 +406,32 @@ export default function PostPage({ post, nav }) {
           {/* MAIN CONTENT */}
           <main>
             <article className="mx-auto py-10">
-              {/* Title (no card look) */}
-              <header className="mb-3">
-                <h1 className="text-3xl font-bold leading-tight tracking-tight">{displayTitle}</h1>
+              {/* Title */}
+              <header className="mb-4">
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{displayTitle}</h1>
               </header>
 
-              {/* Hero with soft shadow */}
+              {/* Hero */}
               {imageUrl ? (
-                <figure className="mb-3 rounded-xl overflow-hidden shadow-md">
+                <figure className="mb-3">
                   <Image
                     src={imageUrl}
                     alt={imageAlt}
                     width={1200}
                     height={630}
-                    className="w-full h-auto"
+                    className="w-full h-auto rounded-xl shadow-lg"
                     priority
                   />
                   {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
                 </figure>
               ) : (
-                <div className="mb-3 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
+                <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
                   No image provided
                 </div>
               )}
 
-              {/* Meta row under hero (light gray box) */}
-              <section className="mt-2 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
+              {/* Meta row */}
+              <section className="mt-3 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
                   {kv("Author", author?.name || authorAIName)}
                   {kv("Skill Level", difficultyLevel)}
@@ -495,13 +491,10 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Body: strip placeholder “Recommended Gear/Editor’s Picks” if affiliateLinks exist */}
+              {/* Body (with inline ad) — cleaned of placeholders + duplicate sections */}
               {Array.isArray(body) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText
-                    value={insertInlineAd(stripRecommended(body, affiliateLinks), 3)}
-                    components={ptComponentsWithAd}
-                  />
+                  <PortableText value={insertInlineAd(stripRecommended(sanitizePortableText(body), affiliateLinks), 3)} components={ptComponentsWithAd} />
                 </div>
               ) : typeof body === "string" && body.trim().length > 0 ? (
                 <StringBody text={body} />
@@ -509,31 +502,24 @@ export default function PostPage({ post, nav }) {
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
               )}
 
-              {/* Manual Amazon links from Sanity (Recommended Gear) */}
-              {haveAffiliate && (
+              {/* Optional affiliate links (manual) */}
+              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
                 <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-4">Recommended Gear</h2>
-                  <ul className="space-y-3">
-                    {affiliateLinks.map((it, i) => {
-                      const label = asString(it?.title || it?.label || it?.name || it);
-                      const href  = typeof it === "object" ? it?.url || it?.href || "" : "";
-                      if (!href || !label) return null;
+                  <h2 className="text-2xl font-semibold mb-3">Recommended Gear</h2>
+                  <ul className="list-disc pl-6 space-y-2">
+                    {affiliateLinks.map((url, i) => {
+                      const u = typeof url === "string" ? url : (url?.href || "");
+                      if (!u) return null;
                       return (
-                        <li key={i} className="flex items-center gap-3">
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener sponsored nofollow"
-                            className="inline-flex items-center rounded border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-                          >
-                            View on Amazon
+                        <li key={i}>
+                          <a href={u} target="_blank" rel="nofollow sponsored noopener noreferrer" className="text-blue-600 underline">
+                            {u}
                           </a>
-                          <span className="text-sm">{label}</span>
                         </li>
                       );
                     })}
                   </ul>
-                  <p className="mt-3 text-xs opacity-70">
+                  <p className="text-xs opacity-70 mt-2">
                     Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra cost to you.
                   </p>
                 </section>
@@ -603,7 +589,7 @@ export default function PostPage({ post, nav }) {
 
               {/* Prev / Next */}
               {(nav?.prev || nav?.next) && (
-                <section className="mt-12 border-top pt-8">
+                <section className="mt-12 border-t pt-8">
                   <h2 className="text-xl font-semibold mb-4">
                     More in {category?.title || "DIY HQ"}
                   </h2>
@@ -687,9 +673,6 @@ export async function getStaticProps({ params }) {
           : sanitizePlainText(asString(f))
       );
     }
-
-    // remove placeholder “Recommended Gear” section when affiliate links exist
-    if (Array.isArray(post.body)) post.body = stripRecommended(post.body, post.affiliateLinks);
 
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
