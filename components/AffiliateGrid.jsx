@@ -1,23 +1,22 @@
 // components/AffiliateGrid.jsx
 import AffiliateCard from "./AffiliateCard";
 
-/**
- * Renders up to 8 affiliate links as a compact grid:
- * - 2 columns on phones, 4 on desktop (2 rows max)
- * - Tight gaps; lives above “Common Mistakes”
- */
 export default function AffiliateGrid({ links = [] }) {
-  const items = (Array.isArray(links) ? links : []).filter(Boolean).slice(0, 8);
-  if (items.length === 0) return null;
+  const clean = Array.isArray(links)
+    ? [...new Set(links.map((x) => String(x || "").trim()).filter(Boolean))].slice(0, 8)
+    : [];
+
+  if (clean.length === 0) return null;
 
   return (
-    <section aria-labelledby="rec-gear" className="mt-10">
-      <h2 id="rec-gear" className="mb-3 text-xl font-semibold">
+    <section className="my-10" aria-labelledby="rec-gear">
+      <h2 id="rec-gear" className="text-xl font-semibold mb-3">
         Recommended Gear
       </h2>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {items.map((u, i) => (
+      {/* 2×4 on desktop; collapses gracefully on small screens */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {clean.map((u, i) => (
           <AffiliateCard key={`${u}-${i}`} url={u} />
         ))}
       </div>

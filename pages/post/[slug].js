@@ -4,18 +4,18 @@ import Image from "next/image";
 import Link from "next/link";
 import { PortableText } from "@portabletext/react";
 import SocialShareBar from "../../components/SocialShareBar.jsx";
-import AffiliateGrid from "../../components/AffiliateGrid.jsx";
 
-// AdSense only on post pages
+// AdSense (unchanged)
 import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-const LEFT_SLOT  = "XXXXXXXXXX";   // Display (left sidebar)
-const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
-const INART_SLOT = "ZZZZZZZZZZ";   // In-article
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+import AffiliateGrid from "../../components/AffiliateGrid.jsx";
 
+const LEFT_SLOT  = "XXXXXXXXXX";
+const RIGHT_SLOT = "YYYYYYYYYY";
+const INART_SLOT = "ZZZZZZZZZZ";
+
+/* ----------------- Sanity queries ----------------- */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
@@ -91,104 +91,8 @@ const ptComponents = {
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
-  t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
-  t = t.replace(/\bfunction\s+anchor\b/gi, "");
-  t = t.replace(/\[ ?native code ?\]/gi, "");
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
-}
-
-function sanitizePortableText(blocks) {
-  if (!Array.isArray(blocks)) return blocks;
-  return blocks.map((b) => {
-    if (b && typeof b === "object") {
-      const out = { ...b };
-      if (Array.isArray(out.children)) {
-        out.children = out.children.map((c) =>
-          c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
-        );
-      }
-      return out;
-    }
-    return b;
-  });
-}
-
-function blockText(b) {
-  if (!b) return "";
-  if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
-  return "";
-}
-
-/** Remove boilerplate sections we don’t want to show */
-function stripUnwantedSections(blocks, affiliateLinks) {
-  if (!Array.isArray(blocks)) return blocks;
-
-  const unwantedHeadings = [
-    /budget\s*&\s*time\s*signals/i,
-    /ready\s*to\s*upgrade/i,
-    /troubleshooting\s*&?\s*fix(-|\s*)ups?/i,
-    /common\s*issues\s*you\s*may\s*encounter/i,
-  ];
-
-  let skipping = false;
-  return blocks.filter((b) => {
-    const isHeading =
-      b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
-    const text = blockText(b).toLowerCase();
-
-    if (isHeading) {
-      // Hide boilerplate headings
-      if (unwantedHeadings.some((rx) => rx.test(text))) {
-        skipping = true;
-        return false;
-      }
-      // Stop skipping when a new section starts
-      if (skipping) skipping = false;
-    }
-
-    if (skipping) return false;
-
-    // If there are no affiliate links, also strip any “Recommended Gear” headings
-    if (!Array.isArray(affiliateLinks) || affiliateLinks.length === 0) {
-      if (/recommended\s+gear|editor'?s?\s*picks/i.test(text)) return false;
-    }
-
-    return true;
-  });
-}
-
-function StringBody({ text }) {
-  const cleaned = sanitizePlainText(text);
-  const paragraphs = cleaned
-    .split(/\r?\n\s*\r?\n/g)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (paragraphs.length === 0) return null;
-  return (
-    <div className="prose lg:prose-lg max-w-none">
-      {paragraphs.map((p, i) => (
-        <p key={i}>{p}</p>
-      ))}
-    </div>
-  );
-}
-
-function kv(label, value) {
-  if (!value) return null;
-  return (
-    <div className="flex flex-col min-w-[8rem]">
-      <span className="text-[10px] uppercase tracking-wide opacity-60">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
-    </div>
-  );
-}
-
-function toCurrency(val) {
-  if (val == null) return null;
-  if (typeof val === "number") return `$${val.toLocaleString()}`;
-  if (typeof val === "string") return val;
-  return String(val);
 }
 
 function asString(item) {
@@ -200,42 +104,53 @@ function asString(item) {
   return String(item);
 }
 
-function maybeEmbed(videoURL) {
-  if (!videoURL) return null;
-  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
-  if (isYouTube) {
-    let id = "";
-    const m1 = videoURL.match(/v=([^&]+)/);
-    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
-    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
-    if (!id) return null;
-    return (
-      <div className="aspect-video w-full my-8">
-        <iframe
-          className="w-full h-full rounded-xl"
-          src={`https://www.youtube.com/embed/${id}`}
-          title="Video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="my-8">
-      <video className="w-full rounded-xl" src={videoURL} controls />
-    </div>
-  );
+/**
+ * Remove legacy editorial stubs and duplicates from the rich‑text body.
+ * We remove these ALWAYS so the body never reprints Recommended Gear, See our pick, duplicate
+ * Disclosures, Ready to upgrade, Budget & Time Signals, etc.
+ */
+function stripEditorialBoilerplate(blocks) {
+  if (!Array.isArray(blocks)) return blocks;
+
+  const badHeading = (txt) =>
+    /recommended\s+gear/i.test(txt) ||
+    /editor'?s?\s+picks/i.test(txt) ||
+    /budget\s*&\s*time\s*signals/i.test(txt) ||
+    /ready\s+to\s+upgrade/i.test(txt) ||
+    /pro\s*tips/i.test(txt); // old stub sections
+
+  const badPara = (txt) =>
+    /^see\s+our\s+pick/i.test(txt) ||
+    /view\s+on\s+amazon/i.test(txt) ||
+    /^disclosure:.*amazon associate/i.test(txt);
+
+  return blocks.filter((b) => {
+    if (b?._type !== "block") return true;
+    const style = String(b?.style || "normal").toLowerCase();
+    const text = (Array.isArray(b.children) ? b.children.map((c) => c?.text || "").join(" ") : "")
+      .trim();
+
+    if (/^h[1-6]$/.test(style) && badHeading(text)) return false;
+    if (badPara(text)) return false;
+    return true;
+  });
 }
 
 function blocksToPlainText(blocks) {
   try {
     return blocks
-      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : "")) //
+      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""))
       .join("\n");
   } catch {
     return "";
   }
+}
+
+function toCurrency(val) {
+  if (val == null) return null;
+  if (typeof val === "number") return `$${val.toLocaleString()}`;
+  if (typeof val === "string") return val;
+  return String(val);
 }
 
 function estimateReadMinutes(post) {
@@ -244,10 +159,10 @@ function estimateReadMinutes(post) {
   if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
   else if (typeof post?.body === "string") text = post.body;
   const words = text ? text.trim().split(/\s+/).length : 0;
-  const mins = Math.max(1, Math.round(words / 200));
-  return mins;
+  return Math.max(1, Math.round(words / 200));
 }
 
+/* Tight, clean prev/next card */
 function NavCard({ label, item }) {
   if (!item) return null;
   const thumb = item?.mainImage?.asset?.url || null;
@@ -260,7 +175,7 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[4rem,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
+      className="group grid grid-cols-[64px,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
     >
       {thumb ? (
         <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
@@ -282,7 +197,7 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- Inline in-article ad after the 3rd block ---------- */
+/* Inline ad marker for PortableText (unchanged) */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
@@ -315,9 +230,7 @@ export default function PostPage({ post, nav }) {
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
         <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
         <div className="mt-6">
-          <Link className="text-blue-600 underline" href="/">
-            Go back home
-          </Link>
+          <Link className="text-blue-600 underline" href="/">Go back home</Link>
         </div>
       </main>
     );
@@ -363,9 +276,6 @@ export default function PostPage({ post, nav }) {
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
-  // Body cleanup: hide boilerplate / duplicates
-  const bodyClean = Array.isArray(body) ? stripUnwantedSections(body, affiliateLinks) : body;
-
   return (
     <>
       <Head>
@@ -383,25 +293,20 @@ export default function PostPage({ post, nav }) {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
       </Head>
 
-      {/* Load AdSense only on post pages */}
       <AdSenseHead />
 
-      {/* OUTER CONTAINER + GRID: [250px ad | 900px article | 250px ad] */}
+      {/* OUTER CONTAINER + GRID */}
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
 
-          {/* LEFT SIDEBAR */}
+          {/* LEFT AD */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={LEFT_SLOT}
-                format="auto"
-                style={{ display: 'block', width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
             </div>
           </aside>
 
-          {/* MAIN CONTENT */}
+          {/* MAIN */}
           <main>
             <article className="mx-auto py-10">
               {/* Title */}
@@ -417,7 +322,7 @@ export default function PostPage({ post, nav }) {
                     alt={imageAlt}
                     width={1200}
                     height={630}
-                    className="w-full h-auto rounded-xl shadow-sm"
+                    className="w-full h-auto rounded-xl shadow"
                     priority
                   />
                   {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
@@ -431,19 +336,21 @@ export default function PostPage({ post, nav }) {
               {/* Meta row under hero */}
               <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                  {kv("Author", author?.name || authorAIName)}
-                  {kv("Skill Level", difficultyLevel)}
-                  {kv("Read Time", readMins ? `${readMins} min` : null)}
-                  {kv("Estimated Cost", costText)}
-                  {kv(
-                    "Category",
-                    category?.title && category?.slug ? (
-                      <Link className="underline" href={`/category/${category.slug}`}>
-                        {category.title}
-                      </Link>
-                    ) : null
-                  )}
-                  {kv("Published", dateText)}
+                  <MetaKV label="Author" value={author?.name || authorAIName} />
+                  <MetaKV label="Skill Level" value={difficultyLevel} />
+                  <MetaKV label="Read Time" value={readMins ? `${readMins} min` : null} />
+                  <MetaKV label="Estimated Cost" value={costText} />
+                  <MetaKV
+                    label="Category"
+                    value={
+                      category?.title && category?.slug ? (
+                        <Link className="underline" href={`/category/${category.slug}`}>
+                          {category.title}
+                        </Link>
+                      ) : null
+                    }
+                  />
+                  <MetaKV label="Published" value={dateText} />
                 </div>
               </section>
 
@@ -457,56 +364,22 @@ export default function PostPage({ post, nav }) {
                 <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
               )}
 
-              {/* Tools / Materials / Safety */}
-              {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
-               (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ||
-               hasTopSafety ? (
-                <section className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
-                    <div>
-                      <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
-                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                        {toolsNeeded.map((t, i) => (<li key={i}>{asString(t)}</li>))}
-                      </ul>
-                    </div>
-                  )}
-                  {Array.isArray(materialsNeeded) && materialsNeeded.length > 0 && (
-                    <div>
-                      <h2 className="text-xl font-semibold mb-2">Materials Needed</h2>
-                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                        {materialsNeeded.map((m, i) => (<li key={i}>{asString(m)}</li>))}
-                      </ul>
-                    </div>
-                  )}
-                  {hasTopSafety && (
-                    <div>
-                      <h2 className="text-xl font-semibold mb-2">Safety Tips</h2>
-                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                        {safetyTips.map((s, i) => (<li key={i}>{asString(s)}</li>))}
-                      </ul>
-                    </div>
-                  )}
-                </section>
-              ) : null}
+              {/* Affiliate grid (compact) */}
+              <AffiliateGrid links={Array.isArray(affiliateLinks) ? affiliateLinks : []} />
 
               {/* Body with inline in-article ad after the 3rd block */}
-              {Array.isArray(bodyClean) ? (
+              {Array.isArray(body) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText value={insertInlineAd(bodyClean, 3)} components={ptComponentsWithAd} />
+                  <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
                 </div>
-              ) : typeof bodyClean === "string" && bodyClean.trim().length > 0 ? (
-                <StringBody text={bodyClean} />
+              ) : typeof body === "string" && body.trim().length > 0 ? (
+                <StringBody text={body} />
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
               )}
 
               {/* Video */}
               {maybeEmbed(videoURL)}
-
-              {/* Affiliate grid — compact — sits above Common Mistakes */}
-              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
-                <AffiliateGrid links={affiliateLinks} />
-              )}
 
               {/* Step-by-step */}
               {steps.length > 0 && (
@@ -549,7 +422,7 @@ export default function PostPage({ post, nav }) {
               )}
 
               {/* FAQ */}
-              {Array.isArray(faqWithAnswers) && faqWithAnswers.length > 0 && (
+              {showFaq && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
                   <div className="space-y-6">
@@ -570,10 +443,8 @@ export default function PostPage({ post, nav }) {
               {/* Prev / Next */}
               {(nav?.prev || nav?.next) && (
                 <section className="mt-12 border-t pt-8">
-                  <h2 className="text-xl font-semibold mb-4">
-                    More in {category?.title || "DIY HQ"}
-                  </h2>
-                  <div className="grid grid-cols-2 gap-3">
+                  <h2 className="text-xl font-semibold mb-4">More in {category?.title || "DIY HQ"}</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <NavCard label="Previous" item={nav.prev} />
                     <NavCard label="Next" item={nav.next} />
                   </div>
@@ -610,19 +481,70 @@ export default function PostPage({ post, nav }) {
             </article>
           </main>
 
-          {/* RIGHT SIDEBAR */}
+          {/* RIGHT AD */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={RIGHT_SLOT}
-                format="auto"
-                style={{ display: 'block', width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
             </div>
           </aside>
         </div>
       </div>
     </>
+  );
+}
+
+/* Small helpers (local to file) */
+function MetaKV({ label, value }) {
+  if (!value) return null;
+  return (
+    <div className="flex flex-col min-w-[8rem]">
+      <span className="text-[10px] uppercase tracking-wide opacity-60">{label}</span>
+      <span className="text-sm font-medium">{value}</span>
+    </div>
+  );
+}
+
+function StringBody({ text }) {
+  const cleaned = sanitizePlainText(text);
+  const paragraphs = cleaned
+    .split(/\r?\n\s*\r?\n/g)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return null;
+  return (
+    <div className="prose lg:prose-lg max-w-none">
+      {paragraphs.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
+    </div>
+  );
+}
+
+function maybeEmbed(videoURL) {
+  if (!videoURL) return null;
+  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
+  if (isYouTube) {
+    let id = "";
+    const m1 = videoURL.match(/v=([^&]+)/);
+    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
+    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
+    if (!id) return null;
+    return (
+      <div className="aspect-video w-full my-8">
+        <iframe
+          className="w-full h-full rounded-xl"
+          src={`https://www.youtube.com/embed/${id}`}
+          title="Video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="my-8">
+      <video className="w-full rounded-xl" src={videoURL} controls />
+    </div>
   );
 }
 
@@ -634,12 +556,16 @@ export async function getStaticProps({ params }) {
     if (!raw) return { notFound: true, revalidate: 60 };
 
     const post = { ...raw };
-    if (Array.isArray(post.body)) post.body = sanitizePortableText(post.body);
+
+    // ALWAYS strip editorial boilerplate + sanitize
+    if (Array.isArray(post.body)) post.body = stripEditorialBoilerplate(post.body);
     if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
     if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
+
     ["toolsNeeded","materialsNeeded","safetyTips","commonMistakes","projectTags"].forEach((k) => {
       if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
     });
+
     if (Array.isArray(post.stepByStepInstructions)) {
       post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
         ...s, title: sanitizePlainText(asString(s?.title)), text: sanitizePlainText(asString(s?.text)),
@@ -654,7 +580,7 @@ export async function getStaticProps({ params }) {
       );
     }
 
-    // Final pass: keep body, affiliateLinks as-is (grid handles empty)
+    // Prev/Next
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
     const cat  = post?.category?.slug || null;
