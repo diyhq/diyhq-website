@@ -1,77 +1,118 @@
-import * as cheerio from "cheerio";
-
-// best-effort absolutizer for og:image etc.
-function absUrl(u, base) {
-  if (!u) return null;
-  if (u.startsWith("//")) return "https:" + u;
-  try {
-    return new URL(u, base).toString();
-  } catch {
-    return null;
-  }
-}
+// pages/api/affiliate-preview.js
+import cheerio from "cheerio";
 
 const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115 Safari/537.36";
+  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
+
+function normalize(url) {
+  try { return new URL(url).toString(); } catch { return ""; }
+}
+
+function domainOf(u) {
+  try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; }
+}
+
+// Extract ASIN from common amazon patterns
+function extractASIN(u) {
+  try {
+    const url = new URL(u);
+    const h = url.hostname;
+    const p = url.pathname;
+
+    // e.g. /dp/B0CXXXXXXX /gp/product/B0CXXXXXXX /Something/dp/B0CXXXXXXX
+    const m = p.match(/(?:dp|gp\/product|o\/ASIN|product-reviews)\/([A-Z0-9]{10})/i);
+    if (m) return m[1].toUpperCase();
+
+    // ?ASIN= query param
+    if (url.searchParams.get("ASIN")) return url.searchParams.get("ASIN").toUpperCase();
+
+    return null;
+  } catch { return null; }
+}
+
+// Build official AsinImage URL (Associate-friendly)
+function asinImageURL(asin, tag) {
+  if (!asin || !tag) return null;
+  const params = new URLSearchParams({
+    _encoding: "UTF8",
+    ASIN: asin,
+    Format: "_SL400_",
+    ID: "AsinImage",
+    MarketPlace: "US",
+    ServiceVersion: "20070822",
+    WS: "1",
+    tag
+  });
+  return `https://ws-na.amazon-adsystem.com/widgets/q?${params.toString()}`;
+}
 
 export default async function handler(req, res) {
-  const input = String(req.query.url || "").trim();
+  const input = String(req.query.url || "");
+  const amazonTag = process.env.NEXT_PUBLIC_AMAZON_TAG || process.env.AMAZON_TAG || "";
+
   if (!input) {
-    res.status(400).json({ ok: false, error: "Missing url" });
-    return;
+    return res.status(400).json({ ok: false, error: "Missing url" });
   }
 
   try {
-    // follow amzn.to => amazon.com redirects; ask for EN HTML
-    const r = await fetch(input, {
+    // 1) follow redirects to get the final URL
+    const r0 = await fetch(input, {
       redirect: "follow",
-      headers: {
-        "user-agent": UA,
-        "accept-language": "en-US,en;q=0.9",
-      },
+      headers: { "user-agent": UA, "accept-language": "en-US,en;q=0.9" },
     });
+    const finalURL = r0.url || input;
 
-    const finalUrl = r.url;
-    const html = await r.text();
+    // 2) fetch HTML of the final URL (again, explicit UA)
+    const r1 = await fetch(finalURL, {
+      redirect: "follow",
+      headers: { "user-agent": UA, "accept-language": "en-US,en;q=0.9" },
+    });
+    const html = await r1.text();
+
+    // 3) parse OG tags
     const $ = cheerio.load(html);
+    const title =
+      $('meta[property="og:title"]').attr("content") ||
+      $('meta[name="twitter:title"]').attr("content") ||
+      $("title").first().text() ||
+      "";
 
-    const pick = (sel, attr = "content") => ($(sel).attr(attr) || "").trim();
-
-    let title =
-      pick('meta[property="og:title"]') ||
-      pick('meta[name="title"]') ||
-      $("title").text().trim();
-
-    let description =
-      pick('meta[property="og:description"]') ||
-      pick('meta[name="description"]');
+    const description =
+      $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="description"]').attr("content") ||
+      $('meta[name="twitter:description"]').attr("content") ||
+      "";
 
     let image =
-      pick('meta[property="og:image"]') ||
-      pick('meta[name="twitter:image"]') ||
-      pick('meta[name="twitter:image:src"]');
+      $('meta[property="og:image"]').attr("content") ||
+      $('meta[name="twitter:image"]').attr("content") ||
+      null;
 
-    image = absUrl(image, finalUrl);
+    const d = domainOf(finalURL);
 
-    // cache on the edge for a day; stale revalidate another day
-    res.setHeader(
-      "Cache-Control",
-      "s-maxage=86400, stale-while-revalidate=86400"
-    );
+    // 4) If Amazon, compute ASIN + AsinImage fallback
+    let asin = null;
+    if (/amazon\./i.test(d) || /amzn\.to$/i.test(d)) {
+      asin = extractASIN(finalURL);
+      if (!image && asin && amazonTag) {
+        image = asinImageURL(asin, amazonTag);
+      }
+    }
 
-    res.status(200).json({
+    // Normalize image URL (avoid protocol-relative)
+    if (image && image.startsWith("//")) image = "https:" + image;
+
+    res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=86400");
+    return res.status(200).json({
       ok: true,
-      url: finalUrl,
-      title: title || null,
-      description: description || null,
+      url: normalize(finalURL),
+      title: title?.trim() || null,
+      description: description?.trim() || null,
       image: image || null,
+      asin,
+      domain: d,
     });
-  } catch (e) {
-    // graceful fallback – card still renders with "View"
-    res.setHeader(
-      "Cache-Control",
-      "s-maxage=3600, stale-while-revalidate=3600"
-    );
-    res.status(200).json({ ok: false, url: input, title: null, description: null, image: null });
+  } catch (err) {
+    return res.status(200).json({ ok: false, error: String(err) });
   }
 }

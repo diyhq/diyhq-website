@@ -1,54 +1,68 @@
-// components/AffiliateCard.jsx
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import { useEffect, useState } from "react";
 
+/**
+ * Small, text‑forward affiliate card.
+ * - Pulls title/description/thumbnail via /api/affiliate-preview
+ * - If Amazon/host blocks the image, we still show a strong title+domain
+ */
 export default function AffiliateCard({ url }) {
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let on = true;
     (async () => {
       try {
-        const r = await fetch(`/api/affiliate/preview?url=${encodeURIComponent(url)}`);
-        const j = await r.json();
-        if (on) setData(j);
+        const res = await fetch(`/api/affiliate-preview?url=${encodeURIComponent(url)}`);
+        const json = await res.json();
+        if (on) setData(json?.ok ? json : null);
       } catch {
-        if (on) setData({ error: true });
+        if (on) setData(null);
+      } finally {
+        if (on) setLoading(false);
       }
     })();
     return () => { on = false; };
   }, [url]);
 
-  const title = data?.title || 'View on Amazon';
-  const desc  = data?.description || data?.domain || '';
-  const img   = data?.image || null; // already has ASIN fallback from the API
-  const href  = data?.url || url;
+  let domain = "";
+  try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+
+  const title = data?.title || domain || "View";
+  const image = data?.image || null;
+  const desc  = data?.description || null;
 
   return (
     <a
-      href={href}
+      href={url}
       target="_blank"
-      rel="nofollow sponsored noopener"
-      className="group block rounded-md border p-3 hover:shadow-md transition"
+      rel="nofollow sponsored noopener noreferrer"
+      className="group block rounded-lg border bg-white hover:shadow-md transition"
     >
-      <div className="aspect-[4/3] w-full overflow-hidden rounded bg-gray-100">
-        {img ? (
-          <Image
-            src={img}
-            alt={title}
-            width={600}
-            height={450}
-            className="h-full w-full object-cover group-hover:scale-[1.02] transition"
+      {/* Image first, but optional */}
+      <div className="aspect-[4/3] w-full overflow-hidden rounded-t-lg bg-gray-50">
+        {image ? (
+          <img
+            src={image}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
         ) : (
-          <div className="h-full w-full flex items-center justify-center text-xs opacity-60">
-            Loading…
+          <div className="flex h-full w-full items-center justify-center text-xs text-gray-500">
+            Preview
           </div>
         )}
       </div>
-      <div className="mt-2 font-medium line-clamp-2">{title}</div>
-      {desc && <div className="mt-1 text-sm opacity-70 line-clamp-2">{desc}</div>}
-      <div className="mt-2 text-sm text-blue-600">View</div>
+
+      <div className="p-3">
+        <div className="text-xs text-gray-500 truncate">{domain}</div>
+        <div className="mt-1 text-sm font-medium leading-5 line-clamp-3">{title}</div>
+        {desc ? <div className="mt-1 text-xs text-gray-500 line-clamp-2">{desc}</div> : null}
+        <div className="mt-2 text-xs font-medium text-orange-600 group-hover:underline">
+          View
+        </div>
+      </div>
     </a>
   );
 }
