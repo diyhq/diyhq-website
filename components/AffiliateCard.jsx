@@ -1,69 +1,96 @@
 // components/AffiliateCard.jsx
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import { useEffect, useState } from "react";
+import Image from "next/image";
+
+function isHttpUrl(u) {
+  if (typeof u !== "string") return false;
+  const s = u.trim();
+  if (!/^https?:\/\//i.test(s)) return false;
+  try {
+    // guard: only call new URL when it looks like a URL
+    new URL(s);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hostFrom(u) {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
 
 export default function AffiliateCard({ url }) {
-  const [data, setData] = useState({ loading: true });
+  const valid = isHttpUrl(url);
+  const [data, setData] = useState({
+    title: null,
+    description: null,
+    image: null,
+  });
 
+  // Fetch preview only for valid URLs
   useEffect(() => {
-    let alive = true;
+    let on = true;
+    if (!valid) return;
     (async () => {
       try {
-        const r = await fetch(`/api/affiliate-preview?url=${encodeURIComponent(url)}`);
-        const json = await r.json();
-        if (!alive) return;
-        setData({ loading: false, ...json });
+        const res = await fetch(
+          `/api/affiliate-preview?url=${encodeURIComponent(url)}`
+        );
+        const json = await res.json();
+        if (on) setData(json || {});
       } catch {
-        if (!alive) return;
-        setData({ loading: false, ok: false });
+        /* ignore */
       }
     })();
     return () => {
-      alive = false;
+      on = false;
     };
-  }, [url]);
+  }, [url, valid]);
 
+  const domain = valid ? hostFrom(url) : null;
   const title =
-    data?.title?.replace(/\s+\|\s*Amazon.*$/i, '').trim() ||
-    new URL(url).hostname.replace(/^www\./, '');
+    data.title ||
+    (valid ? domain : null) ||
+    "Amazon product"; // final fallback
 
   return (
     <a
-      href={data?.url || url}
+      href={valid ? url : undefined}
       target="_blank"
-      rel="nofollow sponsored noopener"
-      className="group block rounded-lg border bg-white shadow-sm hover:shadow-md transition-shadow"
-      aria-label={title || 'View product on Amazon'}
+      rel="nofollow sponsored noopener noreferrer"
+      className="block rounded-lg border p-3 hover:bg-gray-50 transition"
+      aria-label={valid ? `View ${title}` : "View on Amazon"}
     >
-      <div className="flex items-stretch">
-        {/* Thumb */}
-        <div className="relative shrink-0 w-28 h-28 sm:w-32 sm:h-32 border-r overflow-hidden bg-gray-50">
-          {data?.image ? (
+      {/* compact horizontal row: thumbnail left, text right */}
+      <div className="grid grid-cols-[80px,1fr] items-center gap-3">
+        <div className="h-20 w-20 rounded border bg-white overflow-hidden flex items-center justify-center">
+          {data.image ? (
             <Image
               src={data.image}
-              alt={title || 'Product image'}
-              fill
-              sizes="(max-width: 640px) 7rem, 8rem"
-              className="object-contain"
-              priority={false}
+              alt=""
+              width={80}
+              height={80}
+              className="h-20 w-20 object-contain"
             />
           ) : (
-            <div className="absolute inset-0 grid place-items-center text-xs text-gray-400">
-              Preview
-            </div>
+            <span className="text-xs opacity-50">Preview</span>
           )}
         </div>
-
-        {/* Text */}
-        <div className="flex-1 p-3 sm:p-4 min-w-0">
-          <div className="text-sm font-semibold text-gray-900 leading-snug truncate group-hover:text-orange-600">
-            {title || 'View →'}
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-wide opacity-60">
+            {domain || "amzn.to"}
           </div>
-          {data?.description ? (
-            <p className="mt-1 text-xs text-gray-600 line-clamp-3">{data.description}</p>
-          ) : (
-            <p className="mt-1 text-xs text-gray-500">View →</p>
+          <div className="font-medium leading-snug line-clamp-2">{title}</div>
+          {data.description && (
+            <div className="text-sm opacity-70 line-clamp-1">
+              {data.description}
+            </div>
           )}
+          <div className="mt-1 text-sm font-medium text-blue-600">View →</div>
         </div>
       </div>
     </a>
