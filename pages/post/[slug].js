@@ -9,13 +9,12 @@ import SocialShareBar from "../../components/SocialShareBar.jsx";
 import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-const LEFT_SLOT  = "XXXXXXXXXX";
-const RIGHT_SLOT = "YYYYYYYYYY";
-const INART_SLOT = "ZZZZZZZZZZ";
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+// -------- Ad slots (replace with real IDs when ready)
+const LEFT_SLOT  = "XXXXXXXXXX";   // left sidebar
+const RIGHT_SLOT = "YYYYYYYYYY";   // right sidebar
+const INART_SLOT = "ZZZZZZZZZZ";   // in-article
 
-/* ---------------- Sanity queries ---------------- */
+// -------- GROQ queries
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
@@ -30,9 +29,7 @@ const POST_QUERY = `
   body
 }
 `;
-
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
-
 const NAV_QUERY = `
 {
   "prev": *[
@@ -52,7 +49,7 @@ const NAV_QUERY = `
 }
 `;
 
-/* ---------------- PortableText components ---------------- */
+// -------- PortableText components (headings nudged up one level for readability)
 const ptComponents = {
   block: {
     h1: ({ children }) => <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>,
@@ -75,7 +72,7 @@ const ptComponents = {
         <a
           href={href}
           target={external ? "_blank" : undefined}
-          rel={external ? "nofollow sponsored noopener noreferrer" : undefined}
+          rel={external ? "noopener noreferrer" : undefined}
           className="underline"
         >
           {children}
@@ -87,40 +84,31 @@ const ptComponents = {
   },
 };
 
-/* ---------------- Helpers ---------------- */
+// -------- Helpers
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
-
-  // strip stray "native code" artifacts we saw
   t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
   t = t.replace(/\bfunction\s+anchor\b/gi, "");
   t = t.replace(/\[ ?native code ?\]/gi, "");
-
-  // trim “Compare options” / “See our pick …” boilerplate if it ever leaks in as plain text
-  t = t.replace(/^compare options:.*$/gim, "");
-  t = t.replace(/^see our pick.*$/gim, "");
-
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
 
 function sanitizePortableText(blocks) {
   if (!Array.isArray(blocks)) return blocks;
-  return blocks
-    .map((b) => {
-      if (b && typeof b === "object") {
-        const out = { ...b };
-        if (Array.isArray(out.children)) {
-          out.children = out.children.map((c) =>
-            c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
-          );
-        }
-        return out;
+  return blocks.map((b) => {
+    if (b && typeof b === "object") {
+      const out = { ...b };
+      if (Array.isArray(out.children)) {
+        out.children = out.children.map((c) =>
+          c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
+        );
       }
-      return b;
-    })
-    .filter(Boolean);
+      return out;
+    }
+    return b;
+  });
 }
 
 function blockText(b) {
@@ -129,38 +117,52 @@ function blockText(b) {
   return "";
 }
 
-/** Remove “Recommended Gear / Editor’s Picks” and in‑body “Disclosure” stubs */
+/** Remove "Recommended Gear" section if no affiliate links */
 function stripRecommended(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
-
-  // If we *don’t* have affiliate links, strip the whole recommended section.
-  const hasLinks = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
+  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
 
   let skipping = false;
   return blocks.filter((b) => {
     const isHeading =
       b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
-    const text = blockText(b).toLowerCase().trim();
+    const text = blockText(b).toLowerCase();
 
-    // drop “Disclosure: … amazon associate …” blocks (we’ll add one clean disclosure ourselves)
-    if (/^disclosure:.*amazon associate/i.test(text)) return false;
-
-    // Remove placeholders if they leaked in:
-    if (/^see our pick/i.test(text)) return false;
-    if (/^compare options/i.test(text)) return false;
-
-    if (!hasLinks) {
-      if (isHeading) {
-        if (/recommended\s+gear|editor'?s?\s+picks/i.test(text)) {
-          skipping = true;
-          return false;
-        }
-        if (skipping) skipping = false;
-        return true;
+    if (isHeading) {
+      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
+        skipping = true;
+        return false;
       }
-      if (skipping) return false;
+      if (skipping) skipping = false;
+      return true;
     }
 
+    if (skipping) return false;
+
+    if (/^see our pick/i.test(text)) return false;
+    if (/view on amazon/i.test(text)) return false;
+    if (/affiliate code/i.test(text)) return false;
+    if (/^disclosure:.*amazon associate/i.test(text)) return false;
+
+    return true;
+  });
+}
+
+/** NEW: prune orphan / boilerplate headings that appear with no useful content */
+function pruneBoilerplate(blocks) {
+  if (!Array.isArray(blocks)) return blocks;
+  const badHeadings = [
+    /budget\s*&\s*time\s*signals/i,
+    /ready to upgrade your setup\??/i,
+  ];
+  return blocks.filter(b => {
+    if (b?._type === "block" && /^h[1-6]$/i.test(b.style || "")) {
+      const txt = blockText(b);
+      if (badHeadings.some(re => re.test(txt))) return false;
+    }
+    // also strip duplicate one‑line “disclosure” stubs if they slipped into body
+    const t = blockText(b).toLowerCase().trim();
+    if (t.startsWith("disclosure: as an amazon associate")) return false;
     return true;
   });
 }
@@ -174,9 +176,7 @@ function StringBody({ text }) {
   if (paragraphs.length === 0) return null;
   return (
     <div className="prose lg:prose-lg max-w-none">
-      {paragraphs.map((p, i) => (
-        <p key={i}>{p}</p>
-      ))}
+      {paragraphs.map((p, i) => (<p key={i}>{p}</p>))}
     </div>
   );
 }
@@ -255,33 +255,33 @@ function estimateReadMinutes(post) {
   return mins;
 }
 
+/** UPDATED: compact card + crisp thumbnail */
 function NavCard({ label, item }) {
   if (!item) return null;
-  const thumb = item?.mainImage?.asset?.url || null;
+  const raw = item?.mainImage?.asset?.url || null;
+  const thumb = raw ? `${raw}?w=160&h=160&fit=crop&auto=format` : null; // <-- sharp
   const chips = [];
   if (item.difficultyLevel) chips.push(item.difficultyLevel);
-  if (item.readTime) chips.push(`${item.readTime} min`);
+  if (item.readTime)        chips.push(`${item.readTime} min`);
   const cost = toCurrency(item.estimatedCost);
   if (cost) chips.push(cost);
 
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[4rem,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
+      className="group grid grid-cols-[3.5rem,1fr] gap-3 items-center rounded-md border p-3 hover:bg-gray-50 transition max-w-md"
     >
       {thumb ? (
-        <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
+        <Image src={thumb} alt="" width={56} height={56} className="h-14 w-14 rounded object-cover" />
       ) : (
-        <div className="h-16 w-16 rounded bg-gray-100" />
+        <div className="h-14 w-14 rounded bg-gray-100" />
       )}
       <div className="min-w-0">
         <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
         <div className="mt-1 font-medium group-hover:underline line-clamp-2">{item.title}</div>
         {chips.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-70">
-            {chips.map((c, i) => (
-              <span key={i}>{c}</span>
-            ))}
+            {chips.map((c, i) => (<span key={i}>{c}</span>))}
           </div>
         )}
       </div>
@@ -289,41 +289,25 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- inline ad after 3rd block ---------- */
-function insertInlineAd(blocks, index = 3) {
-  if (!Array.isArray(blocks)) return blocks;
-  const out = [...blocks];
-  const i = Math.min(Math.max(index, 1), out.length);
-  out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
-  return out;
+function StringTags({ items }) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((t, i) => (
+        <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">{asString(t)}</span>
+      ))}
+    </div>
+  );
 }
 
-const ptComponentsWithAd = {
-  ...ptComponents,
-  types: {
-    adMarker: () => (
-      <div className="my-8">
-        <AdSlot
-          slot={INART_SLOT}
-          layout="in-article"
-          format="fluid"
-          style={{ display: "block", textAlign: "center" }}
-        />
-      </div>
-    ),
-  },
-};
-
-/* ---------------- Page ---------------- */
+// -------- Page
 export default function PostPage({ post, nav }) {
   if (!post) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
         <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
-        <div className="mt-6">
-          <Link className="text-blue-600 underline" href="/">Go back home</Link>
-        </div>
+        <div className="mt-6"><Link className="text-blue-600 underline" href="/">Go back home</Link></div>
       </main>
     );
   }
@@ -346,7 +330,6 @@ export default function PostPage({ post, nav }) {
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
   const readMins = estimateReadMinutes(post);
   const costText = toCurrency(estimatedCost);
-  const showDisclosure = Array.isArray(affiliateLinks) && affiliateLinks.length > 0;
 
   const canonicalUrl = `https://www.doityourselfhq.com/post/${slug}`;
   const articleLd = {
@@ -386,20 +369,17 @@ export default function PostPage({ post, nav }) {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
       </Head>
 
-      {/* AdSense only on post pages */}
+      {/* Load AdSense only on post pages */}
       <AdSenseHead />
 
+      {/* OUTER CONTAINER + GRID */}
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
 
           {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={LEFT_SLOT}
-                format="auto"
-                style={{ display: 'block', width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
             </div>
           </aside>
 
@@ -408,18 +388,18 @@ export default function PostPage({ post, nav }) {
             <article className="mx-auto py-10">
               {/* Title */}
               <header className="mb-4">
-                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{displayTitle}</h1>
+                <h1 className="text-3xl font-bold leading-tight">{displayTitle}</h1>
               </header>
 
               {/* Hero */}
               {imageUrl ? (
-                <figure className="mb-3">
+                <figure className="mb-2">
                   <Image
                     src={imageUrl}
                     alt={imageAlt}
                     width={1200}
                     height={630}
-                    className="w-full h-auto rounded-xl shadow-lg"
+                    className="w-full h-auto rounded-xl"
                     priority
                   />
                   {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
@@ -430,19 +410,16 @@ export default function PostPage({ post, nav }) {
                 </div>
               )}
 
-              {/* Meta row */}
-              <section className="mt-3 mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
+              {/* Meta row under hero */}
+              <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
                   {kv("Author", author?.name || authorAIName)}
                   {kv("Skill Level", difficultyLevel)}
                   {kv("Read Time", readMins ? `${readMins} min` : null)}
                   {kv("Estimated Cost", costText)}
-                  {kv(
-                    "Category",
+                  {kv("Category",
                     category?.title && category?.slug ? (
-                      <Link className="underline" href={`/category/${category.slug}`}>
-                        {category.title}
-                      </Link>
+                      <Link className="underline" href={`/category/${category.slug}`}>{category.title}</Link>
                     ) : null
                   )}
                   {kv("Published", dateText)}
@@ -491,38 +468,15 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Body (with inline ad) — cleaned of placeholders + duplicate sections */}
+              {/* Body with inline in‑article ad after the 3rd block */}
               {Array.isArray(body) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText value={insertInlineAd(stripRecommended(sanitizePortableText(body), affiliateLinks), 3)} components={ptComponentsWithAd} />
+                  <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
                 </div>
               ) : typeof body === "string" && body.trim().length > 0 ? (
                 <StringBody text={body} />
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
-              )}
-
-              {/* Optional affiliate links (manual) */}
-              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
-                <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-3">Recommended Gear</h2>
-                  <ul className="list-disc pl-6 space-y-2">
-                    {affiliateLinks.map((url, i) => {
-                      const u = typeof url === "string" ? url : (url?.href || "");
-                      if (!u) return null;
-                      return (
-                        <li key={i}>
-                          <a href={u} target="_blank" rel="nofollow sponsored noopener noreferrer" className="text-blue-600 underline">
-                            {u}
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <p className="text-xs opacity-70 mt-2">
-                    Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra cost to you.
-                  </p>
-                </section>
               )}
 
               {/* Video */}
@@ -537,19 +491,13 @@ export default function PostPage({ post, nav }) {
                       const stepText = asString(s?.text) || asString(s);
                       const stepTitle = s?.title ? String(s.title) : null;
                       const stepImage = s?.image?.asset?.url || null;
-                      const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
+                      const stepAlt   = s?.image?.alt || stepTitle || `Step ${i + 1}`;
                       return (
                         <li key={i}>
                           {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
                           {stepText && <p className="mb-3">{stepText}</p>}
                           {stepImage && (
-                            <Image
-                              src={stepImage}
-                              alt={stepAlt}
-                              width={1200}
-                              height={675}
-                              className="rounded-lg mt-2"
-                            />
+                            <Image src={`${stepImage}?w=1200&auto=format`} alt={stepAlt} width={1200} height={675} className="rounded-lg mt-2" />
                           )}
                         </li>
                       );
@@ -562,9 +510,7 @@ export default function PostPage({ post, nav }) {
               {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
-                  <ul className="list-disc pl-6 space-y-2">
-                    {commonMistakes.map((c, i) => (<li key={i}>{asString(c)}</li>))}
-                  </ul>
+                  <ul className="list-disc pl-6 space-y-2">{commonMistakes.map((c, i) => (<li key={i}>{asString(c)}</li>))}</ul>
                 </section>
               )}
 
@@ -575,7 +521,7 @@ export default function PostPage({ post, nav }) {
                   <div className="space-y-6">
                     {faqWithAnswers.map((f, i) => {
                       const q = f?.question || f?.q || `Question ${i + 1}`;
-                      const a = f?.answer || f?.a || "";
+                      const a = f?.answer   || f?.a || "";
                       return (
                         <div key={i} className="rounded-lg border p-4">
                           <div className="font-medium">{q}</div>
@@ -587,15 +533,15 @@ export default function PostPage({ post, nav }) {
                 </section>
               )}
 
-              {/* Prev / Next */}
+              {/* Prev / Next (now compact and centered) */}
               {(nav?.prev || nav?.next) && (
                 <section className="mt-12 border-t pt-8">
                   <h2 className="text-xl font-semibold mb-4">
                     More in {category?.title || "DIY HQ"}
                   </h2>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
                     <NavCard label="Previous" item={nav.prev} />
-                    <NavCard label="Next" item={nav.next} />
+                    <NavCard label="Next"     item={nav.next} />
                   </div>
                 </section>
               )}
@@ -604,13 +550,7 @@ export default function PostPage({ post, nav }) {
               {Array.isArray(projectTags) && projectTags.length > 0 && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-3">Tags</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {projectTags.map((t, i) => (
-                      <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
-                        {asString(t)}
-                      </span>
-                    ))}
-                  </div>
+                  <StringTags items={projectTags} />
                 </section>
               )}
 
@@ -633,11 +573,7 @@ export default function PostPage({ post, nav }) {
           {/* RIGHT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={RIGHT_SLOT}
-                format="auto"
-                style={{ display: 'block', width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
             </div>
           </aside>
         </div>
@@ -646,7 +582,32 @@ export default function PostPage({ post, nav }) {
   );
 }
 
-/* ---------------- Data fetching ---------------- */
+// ---------- Inline ad injection ----------
+function insertInlineAd(blocks, index = 3) {
+  if (!Array.isArray(blocks)) return blocks;
+  const out = [...blocks];
+  const i = Math.min(Math.max(index, 1), out.length);
+  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
+  return out;
+}
+
+const ptComponentsWithAd = {
+  ...ptComponents,
+  types: {
+    adMarker: () => (
+      <div className="my-8">
+        <AdSlot
+          slot={INART_SLOT}
+          layout="in-article"
+          format="fluid"
+          style={{ display: 'block', textAlign: 'center' }}
+        />
+      </div>
+    ),
+  },
+};
+
+// ---------- Data fetching ----------
 export async function getStaticProps({ params }) {
   try {
     const { client } = await import("../../lib/sanity.client");
@@ -669,9 +630,15 @@ export async function getStaticProps({ params }) {
       post.faq = post.faq.map((f) =>
         typeof f === "object"
           ? { ...f, question: sanitizePlainText(asString(f?.question || f?.q)),
-                    answer: sanitizePlainText(asString(f?.answer || f?.a)) }
+                    answer:   sanitizePlainText(asString(f?.answer   || f?.a)) }
           : sanitizePlainText(asString(f))
       );
+    }
+
+    // remove templated sections when no affiliate links
+    if (Array.isArray(post.body)) {
+      post.body = stripRecommended(post.body, post.affiliateLinks);
+      post.body = pruneBoilerplate(post.body); // <-- NEW
     }
 
     let nav = { prev: null, next: null };

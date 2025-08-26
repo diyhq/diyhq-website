@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import SearchBox from "./SearchBox";
 
-const MENU_W = 224; // w-56
+const MENU_W = 224; // Tailwind w-56
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
@@ -31,11 +31,13 @@ export default function Header() {
     const top = rect.bottom + gap;
     setMenuPos({ top, left });
   }
-  const toggleMenu = () => setMenuOpen((v) => {
-    const next = !v;
-    if (next) calcMenuPosition();
-    return next;
-  });
+  const toggleMenu = () => {
+    setMenuOpen(v => {
+      const next = !v;
+      if (next) calcMenuPosition();
+      return next;
+    });
+  };
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -46,11 +48,17 @@ export default function Header() {
       }
     };
     const onKey = (e) => {
-      if (e.key === "Escape") { setMenuOpen(false); setSearchOpen(false); }
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setSearchOpen(false);
+      }
     };
     const onScrollResize = () => {
       if (menuOpen) calcMenuPosition();
-      if (headerRef.current) setSearchTop(headerRef.current.getBoundingClientRect().bottom);
+      if (headerRef.current) {
+        const r = headerRef.current.getBoundingClientRect();
+        setSearchTop(r.bottom);
+      }
     };
     document.addEventListener("mousedown", onDocClick);
     window.addEventListener("keydown", onKey);
@@ -64,7 +72,10 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  useEffect(() => { if (headerRef.current) setSearchTop(headerRef.current.getBoundingClientRect().bottom); }, []);
+  useEffect(() => {
+    if (headerRef.current) setSearchTop(headerRef.current.getBoundingClientRect().bottom);
+  }, []);
+
   useEffect(() => {
     if (!mounted) return;
     if (searchOpen) {
@@ -89,12 +100,16 @@ export default function Header() {
 
   return (
     <>
-      {/* Full-width header bar */}
-      <header ref={headerRef} className="relative z-50 w-full bg-white/90 backdrop-blur border-b">
-        {/* Row: logo | search | categories */}
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 md:px-6 min-h-[64px]">
-          {/* Left: mobile search + logo */}
-          <div className="flex items-center gap-2">
+      {/* Full‑bleed bar so Categories can truly reach the far-right of the viewport */}
+      <header
+        ref={headerRef}
+        className="site-header relative z-50 border-b bg-white/90 backdrop-blur left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen"
+      >
+        {/* 3 columns: [mobile icon] | [centered logo] | [search + categories] */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 md:px-6 min-h-[64px] w-full">
+
+          {/* Left: mobile search icon only */}
+          <div className="justify-self-start">
             <button
               className="inline-flex md:hidden items-center justify-center h-9 w-9 rounded hover:bg-gray-100 text-gray-700"
               aria-label="Open search"
@@ -105,32 +120,33 @@ export default function Header() {
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </button>
+          </div>
 
+          {/* Center: perfectly centered logo */}
+          <div className="justify-self-center">
             <Link href="/" aria-label="DIY HQ Home" className="block">
               <Image
                 src="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg"
                 alt="DIY HQ Logo"
-                width={160}
-                height={80}
+                width={180}
+                height={90}
                 priority
                 className="object-contain"
               />
             </Link>
           </div>
 
-          {/* Center: desktop search */}
-          <div className="hidden md:flex justify-center min-w-0">
-            <div className="w-full max-w-xl min-w-0">
-              <SearchBox />
+          {/* Right: Search sits between the logo (left) and Categories (far-right) */}
+          <div className="grid grid-cols-[1fr_auto] items-center gap-3 justify-self-stretch">
+            <div className="hidden md:flex w-full justify-center min-w-0">
+              <div className="w-full max-w-lg min-w-0">
+                <SearchBox />
+              </div>
             </div>
-          </div>
-
-          {/* Right: Categories pinned to far right */}
-          <div className="justify-self-end">
             <button
               ref={menuBtnRef}
               onClick={toggleMenu}
-              className="flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
+              className="justify-self-end flex items-center gap-2 text-gray-800 hover:text-orange-600 font-semibold text-lg"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls="site-categories-menu"
@@ -145,53 +161,53 @@ export default function Header() {
       </header>
 
       {/* Categories dropdown (portal) */}
-      {mounted && menuOpen &&
-        createPortal(
-          <div
-            ref={menuRef}
-            id="site-categories-menu"
-            role="menu"
-            className="fixed z-[100] w-56 bg-white border shadow-lg rounded-md py-2 max-h-[75vh] overflow-y-auto"
-            style={{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }}
-          >
-            {categories.map((cat) => (
-              <Link
-                key={cat.title}
-                href={cat.path}
-                className="block px-4 py-2 text-sm text-gray-800 hover:bg-orange-100"
-                role="menuitem"
-                onClick={() => setMenuOpen(false)}
-              >
-                {cat.title}
-              </Link>
-            ))}
-          </div>,
-          document.body
-        )}
+      {mounted && menuOpen && createPortal(
+        <div
+          ref={menuRef}
+          id="site-categories-menu"
+          role="menu"
+          className="fixed z-[100] w-56 bg-white border shadow-lg rounded-md py-2 max-h-[75vh] overflow-y-auto"
+          style={{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }}
+        >
+          {categories.map(cat => (
+            <Link
+              key={cat.title}
+              href={cat.path}
+              className="block px-4 py-2 text-sm text-gray-800 hover:bg-orange-100"
+              role="menuitem"
+              onClick={() => setMenuOpen(false)}
+            >
+              {cat.title}
+            </Link>
+          ))}
+        </div>,
+        document.body
+      )}
 
-      {/* Mobile search panel */}
-      {mounted && searchOpen &&
-        createPortal(
-          <>
-            <div className="fixed inset-0 bg-black/30 z-[90]" onClick={() => setSearchOpen(false)} />
-            <div className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3" style={{ top: `${searchTop}px` }}>
-              <div className="flex items-center gap-2">
-                <div className="flex-1"><SearchBox /></div>
-                <button
-                  aria-label="Close search"
-                  className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100"
-                  onClick={() => setSearchOpen(false)}
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+      {/* Mobile search sheet */}
+      {mounted && searchOpen && createPortal(
+        <>
+          <div className="fixed inset-0 bg-black/30 z-[90]" onClick={() => setSearchOpen(false)} />
+          <div className="fixed left-0 right-0 z-[95] bg-white border-b shadow-md p-3" style={{ top: `${searchTop}px` }}>
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <SearchBox />
               </div>
+              <button
+                aria-label="Close search"
+                className="inline-flex items-center justify-center h-9 w-9 rounded hover:bg-gray-100"
+                onClick={() => setSearchOpen(false)}
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
-          </>,
-          document.body
-        )}
+          </div>
+        </>,
+        document.body
+      )}
     </>
   );
 }
