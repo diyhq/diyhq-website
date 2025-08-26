@@ -251,6 +251,7 @@ function estimateReadMinutes(post) {
   return Math.max(1, Math.round(words / 200));
 }
 
+/* ---------- COMPACT Prev/Next card ---------- */
 function NavCard({ label, item }) {
   if (!item) return null;
   const thumb = item?.mainImage?.asset?.url || null;
@@ -263,24 +264,26 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[96px,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
+      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"
     >
       {thumb ? (
         <Image
           src={thumb}
           alt=""
-          width={96}
-          height={96}
-          className="h-24 w-24 rounded object-cover"
+          width={64}
+          height={64}
+          className="h-16 w-16 rounded object-cover"
         />
       ) : (
-        <div className="h-24 w-24 rounded bg-gray-100" />
+        <div className="h-16 w-16 rounded bg-gray-100" />
       )}
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
-        <div className="mt-1 font-medium group-hover:underline line-clamp-2">{item.title}</div>
+        <div className="text-[9px] uppercase tracking-wide opacity-60">{label}</div>
+        <div className="mt-0.5 text-sm font-medium group-hover:underline line-clamp-2">
+          {item.title}
+        </div>
         {chips.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-70">
+          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] opacity-70">
             {chips.map((c, i) => (
               <span key={i}>{c}</span>
             ))}
