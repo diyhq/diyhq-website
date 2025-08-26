@@ -1,107 +1,104 @@
 // pages/api/affiliate-preview.js
-import type { NextApiRequest, NextApiResponse } from "next";
+// Fetch a lightweight preview (title/description/image) for affiliate links.
+// Works with Amazon shorteners and guards all invalid URLs so SSR never crashes.
+
 import * as cheerio from "cheerio";
 
 const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
-function abs(href, base) {
-  try { return new URL(href, base).href; } catch { return null; }
+function safeURL(input) {
+  try {
+    if (!input) return null;
+    const s = String(input).trim();
+    if (!/^https?:\/\//i.test(s)) return null;
+    return new URL(s);
+  } catch {
+    return null;
+  }
 }
 
-function meta($, name) {
-  return (
-    $(`meta[property="${name}"]`).attr("content") ||
-    $(`meta[name="${name}"]`).attr("content") ||
-    ""
-  ).trim();
+function labelFor(input) {
+  if (!input) return "View";
+  try {
+    const u = new URL(input);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return String(input).slice(0, 64);
+  }
 }
 
-async function fetchHtml(url) {
-  // Try a normal fetch first (server-side; redirects are followed).
-  const r = await fetch(url, {
-    redirect: "follow",
-    headers: {
-      "user-agent": UA,
-      "accept-language": "en-US,en;q=0.9",
-      accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    },
-  });
-  const finalUrl = r.url || url;
-  const html = await r.text();
-  return { html, finalUrl };
-}
-
-function parseAmazon($, baseUrl) {
-  // 1) Standard OG first
-  let img = meta($, "og:image");
-  if (!img) {
-    // 2) <img id="landingImage" data-old-hires="..." />
-    const old = $("#landingImage").attr("data-old-hires");
-    if (old) img = old;
+function pickMeta($, ...names) {
+  for (const n of names) {
+    const v =
+      $(`meta[property="${n}"]`).attr("content") ||
+      $(`meta[name="${n}"]`).attr("content");
+    if (v) return v;
   }
-  if (!img) {
-    // 3) <img id="landingImage" data-a-dynamic-image='{"https://m.media-amazon.com/...": [500,500], ...}'
-    const dyn = $("#landingImage").attr("data-a-dynamic-image");
-    if (dyn) {
-      try {
-        const map = JSON.parse(dyn);
-        const first = Object.keys(map)[0];
-        if (first) img = first;
-      } catch {}
-    }
-  }
-  if (!img) {
-    // 4) Any other image_src hint
-    img = $('link[rel="image_src"]').attr("href") || "";
-  }
-
-  const title =
-    meta($, "og:title") || $("title").text().trim() || "View on Amazon";
-  const desc =
-    meta($, "og:description") || meta($, "description") || "";
-
-  return {
-    title,
-    description: desc,
-    image: img ? abs(img, baseUrl) : null,
-  };
+  return null;
 }
 
 export default async function handler(req, res) {
   res.setHeader(
     "Cache-Control",
-    "s-maxage=86400, stale-while-revalidate=86400"
+    "s-maxage=86400, stale-while-revalidate=604800"
   );
 
-  const url = String(req.query.url || "").trim();
+  const raw = Array.isArray(req.query?.url) ? req.query.url[0] : req.query?.url;
+  const parsed = safeURL(raw);
+
+  // If not a full URL, return a harmless stub so the UI still renders.
+  if (!parsed) {
+    return res.status(200).json({
+      ok: true,
+      url: raw || "",
+      title: labelFor(raw || "View"),
+      description: null,
+      image: null,
+    });
+  }
+
   try {
-    const u = new URL(url); // validates
-    const { html, finalUrl } = await fetchHtml(u.href);
-
+    const resp = await fetch(parsed.toString(), {
+      redirect: "follow",
+      headers: {
+        "user-agent": UA,
+        "accept-language": "en-US,en;q=0.8",
+      },
+    });
+    const html = await resp.text();
     const $ = cheerio.load(html);
-    let out = {
-      url: finalUrl,
-      title: meta($, "og:title") || $("title").text().trim(),
-      description: meta($, "og:description") || meta($, "description"),
-      image: meta($, "og:image") || $('link[rel="image_src"]').attr("href"),
-    };
 
-    const host = new URL(finalUrl).hostname;
-    if (!out.image && /amazon\./i.test(host)) {
-      const amz = parseAmazon($, finalUrl);
-      out = { ...out, ...amz };
+    const title =
+      pickMeta($, "og:title", "twitter:title") ||
+      $("title").text() ||
+      labelFor(parsed.hostname);
+
+    const description =
+      pickMeta($, "og:description", "twitter:description") ||
+      $('meta[name="description"]').attr("content") ||
+      null;
+
+    let image =
+      pickMeta($, "og:image", "og:image:url", "twitter:image") || null;
+    if (image && image.startsWith("//")) {
+      image = `${parsed.protocol}${image}`;
     }
-    if (out.image) out.image = abs(out.image, finalUrl);
 
-    res.status(200).json(out);
-  } catch (e) {
-    // Bad input URL or fetch failure — return minimal payload
-    res.status(200).json({
-      url,
-      title: "View →",
-      description: "",
+    return res.status(200).json({
+      ok: true,
+      url: parsed.toString(),
+      title,
+      description,
+      image: image || null,
+    });
+  } catch {
+    // On any fetch/parse error, return a safe stub.
+    return res.status(200).json({
+      ok: true,
+      url: parsed.toString(),
+      title: labelFor(parsed.hostname),
+      description: null,
       image: null,
     });
   }

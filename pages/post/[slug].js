@@ -9,14 +9,12 @@ import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 import AffiliateGrid from "../../components/AffiliateGrid.jsx";
 
-// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-// Ad slots (replace with your real slot IDs)
-const LEFT_SLOT  = "XXXXXXXXXX";
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+const LEFT_SLOT = "XXXXXXXXXX";
 const RIGHT_SLOT = "YYYYYYYYYY";
 const INART_SLOT = "ZZZZZZZZZZ";
-// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-// ---------- GROQ ----------
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
@@ -53,20 +51,30 @@ const NAV_QUERY = `
 }
 `;
 
-// ---------- Portable Text components ----------
+/* ---------------- PortableText components ---------------- */
 const ptComponents = {
   block: {
-    h1: ({ children }) => <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>,
-    h2: ({ children }) => <h3 className="text-xl font-semibold mt-8 mb-3">{children}</h3>,
-    h3: ({ children }) => <h4 className="text-lg font-semibold mt-6 mb-3">{children}</h4>,
+    h1: ({ children }) => (
+      <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>
+    ),
+    h2: ({ children }) => (
+      <h3 className="text-xl font-semibold mt-8 mb-3">{children}</h3>
+    ),
+    h3: ({ children }) => (
+      <h4 className="text-lg font-semibold mt-6 mb-3">{children}</h4>
+    ),
     normal: ({ children }) => <p className="my-4 leading-7">{children}</p>,
     blockquote: ({ children }) => (
       <blockquote className="border-l-4 pl-4 italic my-4">{children}</blockquote>
     ),
   },
   list: {
-    bullet: ({ children }) => <ul className="list-disc pl-6 my-4 space-y-2">{children}</ul>,
-    number: ({ children }) => <ol className="list-decimal pl-6 my-4 space-y-2">{children}</ol>,
+    bullet: ({ children }) => (
+      <ul className="list-disc pl-6 my-4 space-y-2">{children}</ul>
+    ),
+    number: ({ children }) => (
+      <ol className="list-decimal pl-6 my-4 space-y-2">{children}</ol>
+    ),
   },
   marks: {
     link: ({ children, value }) => {
@@ -88,18 +96,16 @@ const ptComponents = {
   },
 };
 
-// ---------- Helpers ----------
+/* ---------------- Helpers ---------------- */
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
-  // kill accidental serialized function ghosts
   t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
   t = t.replace(/\bfunction\s+anchor\b/gi, "");
   t = t.replace(/\[ ?native code ?\]/gi, "");
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
-
 function sanitizePortableText(blocks) {
   if (!Array.isArray(blocks)) return blocks;
   return blocks.map((b) => {
@@ -115,99 +121,20 @@ function sanitizePortableText(blocks) {
     return b;
   });
 }
-
 function blockText(b) {
   if (!b) return "";
   if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
   return "";
 }
-
-/** Strip “Recommended Gear / Editor’s Picks / Compare options /
- *  Ready to upgrade / Budget & Time Signals …” sections in the rich body,
- *  plus any “See our pick… / View on Amazon… / Disclosure …” lines.
- *  Works whether the heading was added as h2 *or* as a plain paragraph.
- */
-function stripBoilerplate(blocks) {
-  if (!Array.isArray(blocks)) return blocks;
-
-  const killSectionHead = /^(recommended\s*gear|editor'?s?\s*picks?|compare\s*options?|budget\s*&?\s*time\s*signals|ready\s*to\s*upgrade.*setup\??|pro\s*tips?|troubleshooting.*fix-?ups?)/i;
-  const killSingleLine = /(Disclosure:\s*As an Amazon Associate)|(See our pick)|(View on Amazon)/i;
-
-  let skipping = false;
-  return blocks.filter((b) => {
-    const isHeading =
-      b?._type === "block" &&
-      typeof b?.style === "string" &&
-      /^h[1-6]$/i.test(b.style);
-
-    const txt = blockText(b).trim();
-
-    // treat true headings OR paragraph headings alike
-    const looksLikeSectionHead = killSectionHead.test(txt);
-
-    if (isHeading || looksLikeSectionHead) {
-      if (killSectionHead.test(txt)) {
-        skipping = true;
-        return false; // drop the heading itself
-      }
-      // if some other heading and we were skipping, stop skipping
-      if (isHeading && skipping) {
-        skipping = false;
-      }
-    }
-
-    if (skipping) return false;
-    if (killSingleLine.test(txt)) return false;
-
-    return true;
-  });
-}
-
-/** Legacy: if body contained an embedded “Recommended Gear” section and there
- *  are *no* affiliate links for the post, hide that orphan chunk.
- */
-function stripRecommended(blocks, affiliateLinks) {
-  if (!Array.isArray(blocks)) return blocks;
-  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
-
-  let skipping = false;
-  return blocks.filter((b) => {
-    const txt = blockText(b).toLowerCase();
-    const isHeading =
-      b?._type === "block" &&
-      typeof b?.style === "string" &&
-      /^h[1-6]$/i.test(b.style);
-
-    if (isHeading) {
-      if (/recommended\s+gear/.test(txt) || /editor'?s?\s+picks/.test(txt)) {
-        skipping = true;
-        return false;
-      }
-      if (skipping) skipping = false;
-      return true;
-    }
-    if (skipping) return false;
-    if (/^see our pick/i.test(txt)) return false;
-    if (/view on amazon/i.test(txt)) return false;
-    if (/^disclosure:.*amazon associate/i.test(txt)) return false;
-    return true;
-  });
-}
-
-function StringBody({ text }) {
-  const cleaned = sanitizePlainText(text);
-  const paragraphs = cleaned
-    .split(/\r?\n\s*\r?\n/g)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (paragraphs.length === 0) return null;
-  return (
-    <div className="prose lg:prose-lg max-w-none">
-      {paragraphs.map((p, i) => (
-        <p key={i}>{p}</p>
-      ))}
-    </div>
-  );
+function blocksToPlainText(blocks) {
+  try {
+    return (blocks || [])
+      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""))
+      .join("\n")
+      .trim();
+  } catch {
+    return "";
+  }
 }
 function kv(label, value) {
   if (!value) return null;
@@ -232,87 +159,65 @@ function asString(item) {
   }
   return String(item);
 }
-function maybeEmbed(videoURL) {
-  if (!videoURL) return null;
-  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
-  if (isYouTube) {
-    let id = "";
-    const m1 = videoURL.match(/v=([^&]+)/);
-    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
-    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
-    if (!id) return null;
-    return (
-      <div className="aspect-video w-full my-8">
-        <iframe
-          className="w-full h-full rounded-xl"
-          src={`https://www.youtube.com/embed/${id}`}
-          title="Video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="my-8">
-      <video className="w-full rounded-xl" src={videoURL} controls />
-    </div>
-  );
-}
-function blocksToPlainText(blocks) {
-  try {
-    return blocks
-      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""))
-      .join("\n");
-  } catch {
-    return "";
-  }
-}
-function estimateReadMinutes(post) {
-  if (typeof post?.readTime === "number" && post.readTime > 0) return post.readTime;
-  let text = "";
-  if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
-  else if (typeof post?.body === "string") text = post.body;
-  const words = text ? text.trim().split(/\s+/).length : 0;
-  const mins = Math.max(1, Math.round(words / 200));
-  return mins;
+
+/** Remove “Recommended Gear / Compare options / Ready to upgrade …” from the rich body. */
+function stripBoilerplate(blocks) {
+  if (!Array.isArray(blocks)) return blocks;
+  const killHead =
+    /recommended\s+gear|editor'?s?\s+picks|compare\s+options|ready\s+to\s+upgrade/i;
+  const killLine = /Disclosure:\s*As an Amazon Associate|See our pick/i;
+
+  let skipping = false;
+  return blocks.filter((b) => {
+    const isHeading =
+      b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
+    const text = blockText(b);
+
+    if (isHeading && killHead.test(text)) {
+      skipping = true;
+      return false;
+    }
+    if (isHeading && skipping) {
+      skipping = false;
+    }
+    if (skipping) return false;
+    if (killLine.test(text)) return false;
+
+    return true;
+  });
 }
 
-function NavCard({ label, item }) {
-  if (!item) return null;
-  const thumb = item?.mainImage?.asset?.url || null;
-  const chips = [];
-  if (item.difficultyLevel) chips.push(item.difficultyLevel);
-  if (item.readTime) chips.push(`${item.readTime} min`);
-  const cost = toCurrency(item.estimatedCost);
-  if (cost) chips.push(cost);
+function stripRecommended(blocks, affiliateLinks) {
+  if (!Array.isArray(blocks)) return blocks;
+  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
+  let skipping = false;
+  return blocks.filter((b) => {
+    const isHeading =
+      b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
+    const text = blockText(b).toLowerCase();
 
-  return (
-    <Link
-      href={`/post/${item.slug}`}
-      className="group grid grid-cols-[96px,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
-    >
-      {thumb ? (
-        <Image src={thumb} alt="" width={96} height={96} className="h-24 w-24 rounded object-cover" />
-      ) : (
-        <div className="h-24 w-24 rounded bg-gray-100" />
-      )}
-      <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
-        <div className="mt-1 font-medium group-hover:underline line-clamp-2">{item.title}</div>
-        {chips.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-70">
-            {chips.map((c, i) => (
-              <span key={i}>{c}</span>
-            ))}
-          </div>
-        )}
-      </div>
-    </Link>
-  );
+    if (isHeading) {
+      if (
+        /recommended\s+gear/.test(text) ||
+        /editor'?s?\s+picks/.test(text) ||
+        /recommended\s+picks/.test(text)
+      ) {
+        skipping = true;
+        return false;
+      }
+      if (skipping) skipping = false;
+      return true;
+    }
+    if (skipping) return false;
+    if (/^see our pick/i.test(text)) return false;
+    if (/view on amazon/i.test(text)) return false;
+    if (/affiliate code/i.test(text)) return false;
+    if (/^disclosure:.*amazon associate/i.test(text)) return false;
+    return true;
+  });
 }
 
-// ---------- Inline ad injection ----------
+/* ---------- Inline in-article ad marker ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
@@ -337,31 +242,105 @@ const ptComponentsWithAd = {
   },
 };
 
-// ====================== PAGE ======================
+function estimateReadMinutes(post) {
+  if (typeof post?.readTime === "number" && post.readTime > 0) return post.readTime;
+  let text = "";
+  if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
+  else if (typeof post?.body === "string") text = post.body;
+  const words = text ? text.trim().split(/\s+/).length : 0;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function NavCard({ label, item }) {
+  if (!item) return null;
+  const thumb = item?.mainImage?.asset?.url || null;
+  const chips = [];
+  if (item.difficultyLevel) chips.push(item.difficultyLevel);
+  if (item.readTime) chips.push(`${item.readTime} min`);
+  const cost = toCurrency(item.estimatedCost);
+  if (cost) chips.push(cost);
+
+  return (
+    <Link
+      href={`/post/${item.slug}`}
+      className="group grid grid-cols-[96px,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
+    >
+      {thumb ? (
+        <Image
+          src={thumb}
+          alt=""
+          width={96}
+          height={96}
+          className="h-24 w-24 rounded object-cover"
+        />
+      ) : (
+        <div className="h-24 w-24 rounded bg-gray-100" />
+      )}
+      <div className="min-w-0">
+        <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
+        <div className="mt-1 font-medium group-hover:underline line-clamp-2">{item.title}</div>
+        {chips.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-70">
+            {chips.map((c, i) => (
+              <span key={i}>{c}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+/* ---------------- Page ---------------- */
 export default function PostPage({ post, nav }) {
   if (!post) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
-        <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
+        <p className="opacity-80">
+          The post you’re looking for doesn’t exist or isn’t available yet.
+        </p>
         <div className="mt-6">
-          <Link className="text-blue-600 underline" href="/">Go back home</Link>
+          <Link className="text-blue-600 underline" href="/">
+            Go back home
+          </Link>
         </div>
       </main>
     );
   }
 
   const {
-    title, excerpt, seoTitle, seoDescription, publishedAt, _createdAt, category, mainImage, body,
-    author, difficultyLevel, estimatedTime, estimatedCost, projectTags, toolsNeeded, materialsNeeded,
-    safetyTips, stepByStepInstructions, commonMistakes, videoURL, affiliateLinks, faq, authorAIName,
+    title,
+    excerpt,
+    seoTitle,
+    seoDescription,
+    publishedAt,
+    _createdAt,
+    category,
+    mainImage,
+    body,
+    author,
+    difficultyLevel,
+    estimatedTime,
+    estimatedCost,
+    projectTags,
+    toolsNeeded,
+    materialsNeeded,
+    safetyTips,
+    stepByStepInstructions,
+    commonMistakes,
+    videoURL,
+    affiliateLinks,
+    faq,
+    authorAIName,
   } = post;
 
   const slug = post.slug;
   const displayTitle = title || "Untitled Post";
   const metaTitle = seoTitle || displayTitle;
   const metaDesc =
-    seoDescription || (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
+    seoDescription ||
+    (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
   const imageUrl = mainImage?.asset?.url || null;
   const imageAlt = mainImage?.alt || displayTitle;
   const caption = mainImage?.caption || mainImage?.alt || null;
@@ -385,13 +364,15 @@ export default function PostPage({ post, nav }) {
 
   const hasTopSafety = Array.isArray(safetyTips) && safetyTips.length > 0;
   const steps = Array.isArray(stepByStepInstructions)
-    ? stepByStepInstructions.filter((s) => asString(s?.title) || asString(s?.text) || s?.image?.asset?.url)
+    ? stepByStepInstructions.filter(
+        (s) => asString(s?.title) || s?.text || s?.image?.asset?.url
+      )
     : [];
   const faqWithAnswers =
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
-  // Body cleanup: remove embedded affiliate/compare blocks & boilerplate
+  // Body cleanup: strip embedded “Recommended Gear / Compare options …”
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
@@ -409,7 +390,10 @@ export default function PostPage({ post, nav }) {
         {(publishedAt || _createdAt) && (
           <meta property="article:published_time" content={publishedAt || _createdAt} />
         )}
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
+        />
       </Head>
 
       <AdSenseHead />
@@ -420,7 +404,11 @@ export default function PostPage({ post, nav }) {
           {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
+              <AdSlot
+                slot={LEFT_SLOT}
+                format="auto"
+                style={{ display: "block", width: 250, minHeight: 250 }}
+              />
             </div>
           </aside>
 
@@ -443,7 +431,9 @@ export default function PostPage({ post, nav }) {
                     className="w-full h-auto rounded-xl"
                     priority
                   />
-                  {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
+                  {caption && (
+                    <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
+                  )}
                 </figure>
               ) : (
                 <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
@@ -461,7 +451,9 @@ export default function PostPage({ post, nav }) {
                   {kv(
                     "Category",
                     category?.title && category?.slug ? (
-                      <Link className="underline" href={`/category/${category.slug}`}>{category.title}</Link>
+                      <Link className="underline" href={`/category/${category.slug}`}>
+                        {category.title}
+                      </Link>
                     ) : null
                   )}
                   {kv("Published", dateText)}
@@ -480,14 +472,16 @@ export default function PostPage({ post, nav }) {
 
               {/* Tools / Materials / Safety */}
               {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
-               (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ||
-               hasTopSafety ? (
+              (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ||
+              hasTopSafety ? (
                 <section className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
                     <div>
                       <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
                       <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                        {toolsNeeded.map((t, i) => (<li key={i}>{asString(t)}</li>))}
+                        {toolsNeeded.map((t, i) => (
+                          <li key={i}>{asString(t)}</li>
+                        ))}
                       </ul>
                     </div>
                   )}
@@ -495,7 +489,9 @@ export default function PostPage({ post, nav }) {
                     <div>
                       <h2 className="text-xl font-semibold mb-2">Materials Needed</h2>
                       <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                        {materialsNeeded.map((m, i) => (<li key={i}>{asString(m)}</li>))}
+                        {materialsNeeded.map((m, i) => (
+                          <li key={i}>{asString(m)}</li>
+                        ))}
                       </ul>
                     </div>
                   )}
@@ -503,7 +499,9 @@ export default function PostPage({ post, nav }) {
                     <div>
                       <h2 className="text-xl font-semibold mb-2">Safety Tips</h2>
                       <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
-                        {safetyTips.map((s, i) => (<li key={i}>{asString(s)}</li>))}
+                        {safetyTips.map((s, i) => (
+                          <li key={i}>{asString(s)}</li>
+                        ))}
                       </ul>
                     </div>
                   )}
@@ -513,31 +511,72 @@ export default function PostPage({ post, nav }) {
               {/* Body with inline ad after the 3rd block */}
               {Array.isArray(cleanBody) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText value={insertInlineAd(cleanBody, 3)} components={ptComponentsWithAd} />
+                  <PortableText
+                    value={insertInlineAd(cleanBody, 3)}
+                    components={ptComponentsWithAd}
+                  />
                 </div>
               ) : typeof cleanBody === "string" && cleanBody.trim().length > 0 ? (
-                <StringBody text={cleanBody} />
+                <div className="prose lg:prose-lg max-w-none">
+                  <p>{cleanBody}</p>
+                </div>
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
               )}
 
               {/* Video */}
-              {maybeEmbed(videoURL)}
+              {videoURL ? (
+                <div className="my-8">
+                  {/* basic YT handling, otherwise <video> */}
+                  {/youtu\.be|youtube\.com/.test(videoURL) ? (
+                    <div className="aspect-video w-full my-8">
+                      <iframe
+                        className="w-full h-full rounded-xl"
+                        src={
+                          (videoURL.match(/v=([^&]+)/) || [])[1]
+                            ? `https://www.youtube.com/embed/${
+                                videoURL.match(/v=([^&]+)/)[1]
+                              }`
+                            : videoURL.replace("watch?v=", "embed/")
+                        }
+                        title="Video"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <video className="w-full rounded-xl" src={videoURL} controls />
+                  )}
+                </div>
+              ) : null}
 
-              {/* Step-by-step */}
-              {Array.isArray(stepByStepInstructions) && stepByStepInstructions.length > 0 && (
+              {/* Step-by-step (PortableText aware) */}
+              {steps.length > 0 && (
                 <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
+                  <h2 className="text-2xl font-semibold mb-4">Step‑by‑Step Instructions</h2>
                   <ol className="list-decimal pl-6 space-y-6">
-                    {stepByStepInstructions.map((s, i) => {
-                      const stepText = asString(s?.text) || asString(s);
+                    {steps.map((s, i) => {
                       const stepTitle = s?.title ? String(s.title) : null;
                       const stepImage = s?.image?.asset?.url || null;
                       const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
+                      const isBlocks = Array.isArray(s?.text);
+                      const hasStringText =
+                        !isBlocks && typeof s?.text === "string" && s.text.trim().length > 0;
+
                       return (
                         <li key={i}>
-                          {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
-                          {stepText && <p className="mb-3">{stepText}</p>}
+                          {stepTitle && (
+                            <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>
+                          )}
+
+                          {isBlocks ? (
+                            <div className="prose max-w-none mb-3">
+                              <PortableText value={s.text} components={ptComponents} />
+                            </div>
+                          ) : hasStringText ? (
+                            <p className="mb-3">{s.text}</p>
+                          ) : null}
+
                           {stepImage && (
                             <Image
                               src={stepImage}
@@ -554,7 +593,7 @@ export default function PostPage({ post, nav }) {
                 </section>
               )}
 
-              {/* ======= RECOMMENDED GEAR (bottom only) ======= */}
+              {/* ======= RECOMMENDED GEAR (bottom) ======= */}
               {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
                 <AffiliateGrid links={affiliateLinks} />
               )}
@@ -564,13 +603,15 @@ export default function PostPage({ post, nav }) {
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
                   <ul className="list-disc pl-6 space-y-2">
-                    {commonMistakes.map((c, i) => (<li key={i}>{asString(c)}</li>))}
+                    {commonMistakes.map((c, i) => (
+                      <li key={i}>{asString(c)}</li>
+                    ))}
                   </ul>
                 </section>
               )}
 
               {/* FAQ */}
-              {Array.isArray(faqWithAnswers) && faqWithAnswers.length > 0 && (
+              {showFaq && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
                   <div className="space-y-6">
@@ -591,7 +632,9 @@ export default function PostPage({ post, nav }) {
               {/* Prev / Next */}
               {(nav?.prev || nav?.next) && (
                 <section className="mt-12 border-t pt-8">
-                  <h2 className="text-xl font-semibold mb-4">More in {category?.title || "DIY HQ"}</h2>
+                  <h2 className="text-xl font-semibold mb-4">
+                    More in {category?.title || "DIY HQ"}
+                  </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <NavCard label="Previous" item={nav.prev} />
                     <NavCard label="Next" item={nav.next} />
@@ -605,7 +648,10 @@ export default function PostPage({ post, nav }) {
                   <h2 className="text-2xl font-semibold mb-3">Tags</h2>
                   <div className="flex flex-wrap gap-2">
                     {projectTags.map((t, i) => (
-                      <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
+                      <span
+                        key={i}
+                        className="rounded-full bg-gray-100 px-3 py-1 text-xs"
+                      >
                         {asString(t)}
                       </span>
                     ))}
@@ -620,7 +666,9 @@ export default function PostPage({ post, nav }) {
                     ← Back to {category.title}
                   </Link>
                 ) : (
-                  <Link className="text-blue-600 underline" href="/">← Back to Home</Link>
+                  <Link className="text-blue-600 underline" href="/">
+                    ← Back to Home
+                  </Link>
                 )}
                 <div id="share-toolbar" className="opacity-60 text-sm" />
               </footer>
@@ -630,7 +678,11 @@ export default function PostPage({ post, nav }) {
           {/* RIGHT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
+              <AdSlot
+                slot={RIGHT_SLOT}
+                format="auto"
+                style={{ display: "block", width: 250, minHeight: 250 }}
+              />
             </div>
           </aside>
         </div>
@@ -639,7 +691,7 @@ export default function PostPage({ post, nav }) {
   );
 }
 
-// ====================== DATA ======================
+/* ---------------- Data fetching ---------------- */
 export async function getStaticProps({ params }) {
   try {
     const { client } = await import("../../lib/sanity.client");
@@ -650,24 +702,32 @@ export async function getStaticProps({ params }) {
     if (Array.isArray(post.body)) post.body = sanitizePortableText(post.body);
     if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
     if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
-    ["toolsNeeded","materialsNeeded","safetyTips","commonMistakes","projectTags"].forEach((k) => {
-      if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
-    });
+    ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach(
+      (k) => {
+        if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
+      }
+    );
     if (Array.isArray(post.stepByStepInstructions)) {
       post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
-        ...s, title: sanitizePlainText(asString(s?.title)), text: sanitizePlainText(asString(s?.text)),
+        ...s,
+        title: sanitizePlainText(asString(s?.title)),
+        // keep s.text as‑is (string or PT array) for the renderer
+        text: Array.isArray(s?.text) ? s.text : sanitizePlainText(asString(s?.text)),
       }));
     }
     if (Array.isArray(post.faq)) {
       post.faq = post.faq.map((f) =>
         typeof f === "object"
-          ? { ...f, question: sanitizePlainText(asString(f?.question || f?.q)),
-                    answer: sanitizePlainText(asString(f?.answer || f?.a)) }
+          ? {
+              ...f,
+              question: sanitizePlainText(asString(f?.question || f?.q)),
+              answer: sanitizePlainText(asString(f?.answer || f?.a)),
+            }
           : sanitizePlainText(asString(f))
       );
     }
 
-    // One more pass to ensure we never show the embedded RG/Compare chunks
+    // Strip in‑body boilerplate affiliate sections
     if (Array.isArray(post.body)) {
       const a = post.affiliateLinks || [];
       post.body = stripBoilerplate(stripRecommended(post.body, a));
@@ -675,7 +735,7 @@ export async function getStaticProps({ params }) {
 
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
-    const cat  = post?.category?.slug || null;
+    const cat = post?.category?.slug || null;
     if (date && cat) nav = await client.fetch(NAV_QUERY, { date, category: cat });
 
     return { props: { post, nav }, revalidate: 60 };

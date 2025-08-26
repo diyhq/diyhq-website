@@ -2,67 +2,83 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
+function safeHost(u) {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
 export default function AffiliateCard({ url }) {
-  const [state, setState] = useState({
+  const [data, setData] = useState({
     loading: true,
+    url,
     title: null,
     description: null,
     image: null,
-    finalUrl: url,
   });
 
   useEffect(() => {
     let alive = true;
+    const q = typeof url === "string" ? url : "";
     (async () => {
       try {
-        const r = await fetch(`/api/affiliate-preview?url=${encodeURIComponent(url)}`);
+        const r = await fetch(
+          `/api/affiliate-preview?url=${encodeURIComponent(q)}`
+        );
         const j = await r.json();
-        if (!alive) return;
-        setState({
-          loading: false,
-          title: j.title || "View →",
-          description: j.description || "",
-          image: j.image || null,
-          finalUrl: j.url || url,
-        });
+        if (alive) setData({ loading: false, ...j });
       } catch {
-        if (!alive) return;
-        setState((s) => ({ ...s, loading: false }));
+        if (alive) setData((d) => ({ ...d, loading: false }));
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [url]);
+
+  const href =
+    (data?.url && /^https?:\/\//i.test(data.url) && data.url) ||
+    (typeof url === "string" && /^https?:\/\//i.test(url) && url) ||
+    null;
+  const host = href ? safeHost(href) : "";
 
   return (
     <a
-      href={state.finalUrl || url}
-      target="_blank"
-      rel="nofollow sponsored noopener"
-      className="block rounded-lg border bg-white hover:shadow-md transition"
+      href={href || undefined}
+      target={href ? "_blank" : undefined}
+      rel={href ? "nofollow noopener noreferrer" : undefined}
+      className="block rounded-lg border p-3 hover:bg-gray-50 transition"
     >
-      <div className="grid grid-cols-[80px,1fr] gap-3 p-3 items-center">
-        <div className="w-20 h-20 rounded bg-gray-50 overflow-hidden flex items-center justify-center">
-          {state.image ? (
+      <div className="grid grid-cols-[64px,1fr] gap-3 items-center">
+        <div className="h-16 w-16 flex items-center justify-center">
+          {data?.image ? (
             <Image
-              src={state.image}
-              alt=""
-              width={80}
-              height={80}
-              className="w-20 h-20 object-contain"
+              src={data.image}
+              alt={data?.title || "Product image"}
+              width={64}
+              height={64}
+              className="h-16 w-16 object-contain"
             />
           ) : (
-            <span className="text-[10px] uppercase tracking-wider text-gray-400">Preview</span>
+            <div className="h-16 w-16 rounded bg-gray-100 text-[10px] flex items-center justify-center">
+              Preview
+            </div>
           )}
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-medium leading-snug line-clamp-2">
-            {state.title || "View →"}
+          <div className="text-[10px] uppercase tracking-wide opacity-60">
+            {host || "amazon.to"}
           </div>
-          {state.description && (
-            <div className="mt-1 text-xs opacity-70 line-clamp-2">
-              {state.description}
+          <div className="font-medium line-clamp-2">
+            {data?.title || "View →"}
+          </div>
+          {data?.description ? (
+            <div className="mt-1 text-sm opacity-80 line-clamp-2">
+              {data.description}
             </div>
-          )}
+          ) : null}
           <div className="mt-1 text-xs text-blue-600">View →</div>
         </div>
       </div>
