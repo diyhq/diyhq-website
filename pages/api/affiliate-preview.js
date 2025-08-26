@@ -1,118 +1,73 @@
 // pages/api/affiliate-preview.js
-import cheerio from "cheerio";
+export const config = {
+  runtime: "edge",
+};
 
-const UA =
-  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
-
-function normalize(url) {
-  try { return new URL(url).toString(); } catch { return ""; }
-}
-
-function domainOf(u) {
-  try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; }
-}
-
-// Extract ASIN from common amazon patterns
-function extractASIN(u) {
-  try {
-    const url = new URL(u);
-    const h = url.hostname;
-    const p = url.pathname;
-
-    // e.g. /dp/B0CXXXXXXX /gp/product/B0CXXXXXXX /Something/dp/B0CXXXXXXX
-    const m = p.match(/(?:dp|gp\/product|o\/ASIN|product-reviews)\/([A-Z0-9]{10})/i);
-    if (m) return m[1].toUpperCase();
-
-    // ?ASIN= query param
-    if (url.searchParams.get("ASIN")) return url.searchParams.get("ASIN").toUpperCase();
-
-    return null;
-  } catch { return null; }
-}
-
-// Build official AsinImage URL (Associate-friendly)
-function asinImageURL(asin, tag) {
-  if (!asin || !tag) return null;
-  const params = new URLSearchParams({
-    _encoding: "UTF8",
-    ASIN: asin,
-    Format: "_SL400_",
-    ID: "AsinImage",
-    MarketPlace: "US",
-    ServiceVersion: "20070822",
-    WS: "1",
-    tag
-  });
-  return `https://ws-na.amazon-adsystem.com/widgets/q?${params.toString()}`;
-}
-
-export default async function handler(req, res) {
-  const input = String(req.query.url || "");
-  const amazonTag = process.env.NEXT_PUBLIC_AMAZON_TAG || process.env.AMAZON_TAG || "";
-
-  if (!input) {
-    return res.status(400).json({ ok: false, error: "Missing url" });
+function pick(meta, keys) {
+  for (const k of keys) {
+    const v = meta.get(k);
+    if (v) return v;
   }
+  return "";
+}
 
+export default async function handler(req) {
   try {
-    // 1) follow redirects to get the final URL
-    const r0 = await fetch(input, {
-      redirect: "follow",
-      headers: { "user-agent": UA, "accept-language": "en-US,en;q=0.9" },
-    });
-    const finalURL = r0.url || input;
-
-    // 2) fetch HTML of the final URL (again, explicit UA)
-    const r1 = await fetch(finalURL, {
-      redirect: "follow",
-      headers: { "user-agent": UA, "accept-language": "en-US,en;q=0.9" },
-    });
-    const html = await r1.text();
-
-    // 3) parse OG tags
-    const $ = cheerio.load(html);
-    const title =
-      $('meta[property="og:title"]').attr("content") ||
-      $('meta[name="twitter:title"]').attr("content") ||
-      $("title").first().text() ||
-      "";
-
-    const description =
-      $('meta[property="og:description"]').attr("content") ||
-      $('meta[name="description"]').attr("content") ||
-      $('meta[name="twitter:description"]').attr("content") ||
-      "";
-
-    let image =
-      $('meta[property="og:image"]').attr("content") ||
-      $('meta[name="twitter:image"]').attr("content") ||
-      null;
-
-    const d = domainOf(finalURL);
-
-    // 4) If Amazon, compute ASIN + AsinImage fallback
-    let asin = null;
-    if (/amazon\./i.test(d) || /amzn\.to$/i.test(d)) {
-      asin = extractASIN(finalURL);
-      if (!image && asin && amazonTag) {
-        image = asinImageURL(asin, amazonTag);
-      }
+    const { searchParams } = new URL(req.url);
+    const target = searchParams.get("url");
+    if (!target) {
+      return new Response(JSON.stringify({ ok: false, error: "missing url" }), { status: 400 });
     }
 
-    // Normalize image URL (avoid protocol-relative)
-    if (image && image.startsWith("//")) image = "https:" + image;
-
-    res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=86400");
-    return res.status(200).json({
-      ok: true,
-      url: normalize(finalURL),
-      title: title?.trim() || null,
-      description: description?.trim() || null,
-      image: image || null,
-      asin,
-      domain: d,
+    const resp = await fetch(target, {
+      headers: {
+        // Helps Amazon and others return normal HTML with OG tags
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "accept-language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
     });
-  } catch (err) {
-    return res.status(200).json({ ok: false, error: String(err) });
+
+    const html = await resp.text();
+    const meta = new Map();
+    // very small parser for common OG/SEO tags
+    const re = /<meta\s+[^>]*?(?:property|name)\s*=\s*["']([^"']+)["'][^>]*?\scontent\s*=\s*["']([^"']+)["'][^>]*?>/gi;
+    let m;
+    while ((m = re.exec(html))) {
+      meta.set(m[1].toLowerCase(), m[2]);
+    }
+
+    let title = pick(meta, ["og:title", "twitter:title", "title", "name"]);
+    let description = pick(meta, ["og:description", "twitter:description", "description"]);
+    let image = pick(meta, ["og:image", "twitter:image", "og:image:url"]);
+
+    // Amazon tidy-ups
+    try {
+      const host = new URL(target).hostname;
+      if (/amazon\./i.test(host)) {
+        // Strip leading "Amazon.com:" noise
+        title = title.replace(/^Amazon(\.com)?:\s*/i, "");
+        // Prefer m.media-amazon host if present
+        if (image && !/m\.media\-amazon\.com/i.test(image)) {
+          const mm = image.match(/\/images\/I\/[^"']+/i);
+          if (mm) image = `https://m.media-amazon.com${mm[0]}`;
+        }
+      }
+    } catch {}
+
+    // fallback image (allowed in next.config)
+    if (!image) image = "https://images-na.ssl-images-amazon.com/images/G/01/anywhere/amazon_logo._CB485945433_.png";
+
+    const body = JSON.stringify({ ok: true, title, description, image, url: target });
+    return new Response(body, {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        // CDN cache a week; SWR 1 day
+        "cache-control": "s-maxage=604800, stale-while-revalidate=86400",
+      },
+    });
+  } catch {
+    return new Response(JSON.stringify({ ok: false }), { status: 200 });
   }
 }

@@ -2,71 +2,59 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
-function hostOf(url = "") {
-  try {
-    const h = new URL(url).hostname.replace(/^www\./i, "");
-    return h || "";
-  } catch {
-    return "";
-  }
-}
-
 export default function AffiliateCard({ url }) {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({ title: "", description: "", image: "", url });
+  const [data, setData] = useState({ loading: true, title: "", description: "", image: null });
 
   useEffect(() => {
     let alive = true;
-    async function run() {
+    async function go() {
       try {
-        const res = await fetch(`/api/affiliate/preview?url=${encodeURIComponent(url)}`);
-        const j = await res.json();
-        if (alive) setData((d) => ({ ...d, ...j }));
+        const res = await fetch(`/api/affiliate-preview?url=${encodeURIComponent(url)}`);
+        const json = await res.json();
+        if (!alive) return;
+        setData({ loading: false, title: json.title || "", description: json.description || "", image: json.image || null });
       } catch {
-        // ignore; we still render a minimal tile
-      } finally {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        setData({ loading: false, title: "", description: "", image: null });
       }
     }
-    run();
-    return () => {
-      alive = false;
-    };
+    go();
+    return () => { alive = false; };
   }, [url]);
 
-  const h = hostOf(data.url || url);
-  const title = data.title || h || "View";
+  const linkHost = (() => {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
+  })();
+
+  const thumb = data.image || "/images/logo/DIY_HQ_Logo_WhiteBackground.jpg";
 
   return (
     <a
-      href={data.url || url}
+      href={url}
       target="_blank"
-      rel="nofollow sponsored noopener"
-      className="group block rounded-md border bg-white hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-orange-400"
+      rel="noopener noreferrer nofollow sponsored"
+      className="group grid grid-cols-[96px,1fr] gap-3 rounded-lg border bg-white p-3 shadow-sm hover:shadow-md transition"
     >
-      {/* Horizontal compact tile: image left, text right */}
-      <div className="grid grid-cols-[96px,1fr] gap-3 p-3 items-center">
-        <div className="relative w-[96px] h-[96px] rounded bg-gray-100 overflow-hidden">
-          {data.image ? (
-            <Image
-              src={data.image}
-              alt={title}
-              fill
-              className="object-cover transition-transform duration-200 group-hover:scale-105"
-              sizes="96px"
-            />
-          ) : (
-            <div className="absolute inset-0 grid place-items-center text-xs text-gray-400">
-              {loading ? "…" : "No image"}
-            </div>
-          )}
-        </div>
+      <div className="relative h-24 w-24 overflow-hidden rounded">
+        <Image
+          src={thumb}
+          alt={data.title || "Product"}
+          width={96}
+          height={96}
+          className="h-24 w-24 object-cover"
+          priority={false}
+        />
+      </div>
 
-        <div className="min-w-0">
-          {h ? <div className="text-[11px] uppercase tracking-wide text-gray-500">{h}</div> : null}
-          <div className="mt-0.5 font-medium text-sm leading-5 line-clamp-2">{title}</div>
-          <div className="mt-1 text-[12px] text-orange-600 underline">View</div>
+      <div className="min-w-0">
+        <div className="text-xs uppercase tracking-wide opacity-60">{linkHost || "Amazon"}</div>
+        <div className="mt-1 line-clamp-2 font-medium leading-snug">
+          {data.loading ? "Preview…" : (data.title || "View product")}
         </div>
+        {data.description ? (
+          <div className="mt-1 line-clamp-2 text-sm opacity-80">{data.description}</div>
+        ) : null}
+        <div className="mt-2 text-sm font-medium text-blue-600 group-hover:underline">View</div>
       </div>
     </a>
   );

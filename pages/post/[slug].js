@@ -5,23 +5,23 @@ import Link from "next/link";
 import { PortableText } from "@portabletext/react";
 import SocialShareBar from "../../components/SocialShareBar.jsx";
 
-// AdSense (unchanged)
 import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
-
 import AffiliateGrid from "../../components/AffiliateGrid.jsx";
 
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const LEFT_SLOT  = "XXXXXXXXXX";
 const RIGHT_SLOT = "YYYYYYYYYY";
 const INART_SLOT = "ZZZZZZZZZZ";
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-/* ----------------- Sanity queries ----------------- */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
   estimatedTime,estimatedCost,readTime,difficultyLevel,authorAIName,commentsEnabled,updateLog,
   featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[],
   commonMistakes[],safetyTips[],"toolsNeeded": toolsNeeded[],"materialsNeeded": materialsNeeded[],
+
   "stepByStepInstructions": stepByStepInstructions[]{...,title,text,image{asset->{url}, alt}},
   mainImage{alt,caption,asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }},
   "category": coalesce(category->{ _id, title, "slug": slug.current },
@@ -91,10 +91,115 @@ const ptComponents = {
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
+  t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
+  t = t.replace(/\bfunction\s+anchor\b/gi, "");
+  t = t.replace(/\[ ?native code ?\]/gi, "");
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
+function sanitizePortableText(blocks) {
+  if (!Array.isArray(blocks)) return blocks;
+  return blocks.map((b) => {
+    if (b && typeof b === "object") {
+      const out = { ...b };
+      if (Array.isArray(out.children)) {
+        out.children = out.children.map((c) =>
+          c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
+        );
+      }
+      return out;
+    }
+    return b;
+  });
+}
+function blockText(b) {
+  if (!b) return "";
+  if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
+  return "";
+}
 
+/** Remove “Recommended Gear / Compare options / Ready to upgrade …”
+ *  regardless of where it appears in the rich body.
+ */
+function stripBoilerplate(blocks) {
+  if (!Array.isArray(blocks)) return blocks;
+  const killHead = /recommended\s+gear|editor'?s?\s+picks|compare\s+options|ready\s+to\s+upgrade/i;
+  const killLine = /Disclosure:\s*As an Amazon Associate|See our pick/i;
+
+  let skipping = false;
+  return blocks.filter((b) => {
+    const isHeading = b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
+    const text = blockText(b);
+
+    // strip headings that match
+    if (isHeading && killHead.test(text)) { skipping = true; return false; }
+
+    // stop skipping at next heading
+    if (isHeading && skipping) { skipping = false; }
+
+    if (skipping) return false;
+    if (killLine.test(text)) return false; // strip see‑our‑pick / disclosure lines inside body
+
+    return true;
+  });
+}
+
+/** Existing helper that hid in‑body “Recommended Gear” when no affiliate links. */
+function stripRecommended(blocks, affiliateLinks) {
+  if (!Array.isArray(blocks)) return blocks;
+  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks; // keep; we’ll strip with stripBoilerplate
+  let skipping = false;
+  return blocks.filter((b) => {
+    const isHeading = b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
+    const text = blockText(b).toLowerCase();
+
+    if (isHeading) {
+      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
+        skipping = true;
+        return false;
+      }
+      if (skipping) skipping = false;
+      return true;
+    }
+    if (skipping) return false;
+    if (/^see our pick/i.test(text)) return false;
+    if (/view on amazon/i.test(text)) return false;
+    if (/affiliate code/i.test(text)) return false;
+    if (/^disclosure:.*amazon associate/i.test(text)) return false;
+    return true;
+  });
+}
+
+function StringBody({ text }) {
+  const cleaned = sanitizePlainText(text);
+  const paragraphs = cleaned
+    .split(/\r?\n\s*\r?\n/g)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return null;
+  return (
+    <div className="prose lg:prose-lg max-w-none">
+      {paragraphs.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
+    </div>
+  );
+}
+function kv(label, value) {
+  if (!value) return null;
+  return (
+    <div className="flex flex-col min-w-[8rem]">
+      <span className="text-[10px] uppercase tracking-wide opacity-60">{label}</span>
+      <span className="text-sm font-medium">{value}</span>
+    </div>
+  );
+}
+function toCurrency(val) {
+  if (val == null) return null;
+  if (typeof val === "number") return `$${val.toLocaleString()}`;
+  if (typeof val === "string") return val;
+  return String(val);
+}
 function asString(item) {
   if (!item) return null;
   if (typeof item === "string") return item;
@@ -103,39 +208,33 @@ function asString(item) {
   }
   return String(item);
 }
-
-/**
- * Remove legacy editorial stubs and duplicates from the rich‑text body.
- * We remove these ALWAYS so the body never reprints Recommended Gear, See our pick, duplicate
- * Disclosures, Ready to upgrade, Budget & Time Signals, etc.
- */
-function stripEditorialBoilerplate(blocks) {
-  if (!Array.isArray(blocks)) return blocks;
-
-  const badHeading = (txt) =>
-    /recommended\s+gear/i.test(txt) ||
-    /editor'?s?\s+picks/i.test(txt) ||
-    /budget\s*&\s*time\s*signals/i.test(txt) ||
-    /ready\s+to\s+upgrade/i.test(txt) ||
-    /pro\s*tips/i.test(txt); // old stub sections
-
-  const badPara = (txt) =>
-    /^see\s+our\s+pick/i.test(txt) ||
-    /view\s+on\s+amazon/i.test(txt) ||
-    /^disclosure:.*amazon associate/i.test(txt);
-
-  return blocks.filter((b) => {
-    if (b?._type !== "block") return true;
-    const style = String(b?.style || "normal").toLowerCase();
-    const text = (Array.isArray(b.children) ? b.children.map((c) => c?.text || "").join(" ") : "")
-      .trim();
-
-    if (/^h[1-6]$/.test(style) && badHeading(text)) return false;
-    if (badPara(text)) return false;
-    return true;
-  });
+function maybeEmbed(videoURL) {
+  if (!videoURL) return null;
+  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
+  if (isYouTube) {
+    let id = "";
+    const m1 = videoURL.match(/v=([^&]+)/);
+    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
+    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
+    if (!id) return null;
+    return (
+      <div className="aspect-video w-full my-8">
+        <iframe
+          className="w-full h-full rounded-xl"
+          src={`https://www.youtube.com/embed/${id}`}
+          title="Video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="my-8">
+      <video className="w-full rounded-xl" src={videoURL} controls />
+    </div>
+  );
 }
-
 function blocksToPlainText(blocks) {
   try {
     return blocks
@@ -145,24 +244,16 @@ function blocksToPlainText(blocks) {
     return "";
   }
 }
-
-function toCurrency(val) {
-  if (val == null) return null;
-  if (typeof val === "number") return `$${val.toLocaleString()}`;
-  if (typeof val === "string") return val;
-  return String(val);
-}
-
 function estimateReadMinutes(post) {
   if (typeof post?.readTime === "number" && post.readTime > 0) return post.readTime;
   let text = "";
   if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
   else if (typeof post?.body === "string") text = post.body;
   const words = text ? text.trim().split(/\s+/).length : 0;
-  return Math.max(1, Math.round(words / 200));
+  const mins = Math.max(1, Math.round(words / 200));
+  return mins;
 }
 
-/* Tight, clean prev/next card */
 function NavCard({ label, item }) {
   if (!item) return null;
   const thumb = item?.mainImage?.asset?.url || null;
@@ -175,12 +266,12 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[64px,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
+      className="group grid grid-cols-[96px,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
     >
       {thumb ? (
-        <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
+        <Image src={thumb} alt="" width={96} height={96} className="h-24 w-24 rounded object-cover" />
       ) : (
-        <div className="h-16 w-16 rounded bg-gray-100" />
+        <div className="h-24 w-24 rounded bg-gray-100" />
       )}
       <div className="min-w-0">
         <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
@@ -197,12 +288,12 @@ function NavCard({ label, item }) {
   );
 }
 
-/* Inline ad marker for PortableText (unchanged) */
+/* ---------- In-article ad injection ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
   const i = Math.min(Math.max(index, 1), out.length);
-  out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
+  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
   return out;
 }
 
@@ -215,7 +306,7 @@ const ptComponentsWithAd = {
           slot={INART_SLOT}
           layout="in-article"
           format="fluid"
-          style={{ display: "block", textAlign: "center" }}
+          style={{ display: 'block', textAlign: 'center' }}
         />
       </div>
     ),
@@ -276,6 +367,10 @@ export default function PostPage({ post, nav }) {
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
+  // --- body cleanup: strip boilerplate and embedded affiliate sections
+  let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
+  cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
+
   return (
     <>
       <Head>
@@ -295,18 +390,17 @@ export default function PostPage({ post, nav }) {
 
       <AdSenseHead />
 
-      {/* OUTER CONTAINER + GRID */}
+      {/* OUTER CONTAINER + GRID: [250px ad | 900px article | 250px ad] */}
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
-
-          {/* LEFT AD */}
+          {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
+              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
             </div>
           </aside>
 
-          {/* MAIN */}
+          {/* MAIN CONTENT */}
           <main>
             <article className="mx-auto py-10">
               {/* Title */}
@@ -322,7 +416,7 @@ export default function PostPage({ post, nav }) {
                     alt={imageAlt}
                     width={1200}
                     height={630}
-                    className="w-full h-auto rounded-xl shadow"
+                    className="w-full h-auto rounded-xl"
                     priority
                   />
                   {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
@@ -333,24 +427,20 @@ export default function PostPage({ post, nav }) {
                 </div>
               )}
 
-              {/* Meta row under hero */}
+              {/* Meta row */}
               <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                  <MetaKV label="Author" value={author?.name || authorAIName} />
-                  <MetaKV label="Skill Level" value={difficultyLevel} />
-                  <MetaKV label="Read Time" value={readMins ? `${readMins} min` : null} />
-                  <MetaKV label="Estimated Cost" value={costText} />
-                  <MetaKV
-                    label="Category"
-                    value={
-                      category?.title && category?.slug ? (
-                        <Link className="underline" href={`/category/${category.slug}`}>
-                          {category.title}
-                        </Link>
-                      ) : null
-                    }
-                  />
-                  <MetaKV label="Published" value={dateText} />
+                  {kv("Author", author?.name || authorAIName)}
+                  {kv("Skill Level", difficultyLevel)}
+                  {kv("Read Time", readMins ? `${readMins} min` : null)}
+                  {kv("Estimated Cost", costText)}
+                  {kv(
+                    "Category",
+                    category?.title && category?.slug ? (
+                      <Link className="underline" href={`/category/${category.slug}`}>{category.title}</Link>
+                    ) : null
+                  )}
+                  {kv("Published", dateText)}
                 </div>
               </section>
 
@@ -364,16 +454,45 @@ export default function PostPage({ post, nav }) {
                 <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
               )}
 
-              {/* Affiliate grid (compact) */}
-              <AffiliateGrid links={Array.isArray(affiliateLinks) ? affiliateLinks : []} />
+              {/* Tools / Materials / Safety */}
+              {(Array.isArray(toolsNeeded) && toolsNeeded.length > 0) ||
+               (Array.isArray(materialsNeeded) && materialsNeeded.length > 0) ||
+               hasTopSafety ? (
+                <section className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
+                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
+                        {toolsNeeded.map((t, i) => (<li key={i}>{asString(t)}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                  {Array.isArray(materialsNeeded) && materialsNeeded.length > 0 && (
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">Materials Needed</h2>
+                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
+                        {materialsNeeded.map((m, i) => (<li key={i}>{asString(m)}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                  {hasTopSafety && (
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">Safety Tips</h2>
+                      <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
+                        {safetyTips.map((s, i) => (<li key={i}>{asString(s)}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                </section>
+              ) : null}
 
-              {/* Body with inline in-article ad after the 3rd block */}
-              {Array.isArray(body) ? (
+              {/* Body with inline ad after the 3rd block */}
+              {Array.isArray(cleanBody) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
+                  <PortableText value={insertInlineAd(cleanBody, 3)} components={ptComponentsWithAd} />
                 </div>
-              ) : typeof body === "string" && body.trim().length > 0 ? (
-                <StringBody text={body} />
+              ) : typeof cleanBody === "string" && cleanBody.trim().length > 0 ? (
+                <StringBody text={cleanBody} />
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
               )}
@@ -411,6 +530,11 @@ export default function PostPage({ post, nav }) {
                 </section>
               )}
 
+              {/* ======= RECOMMENDED GEAR (bottom) ======= */}
+              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
+                <AffiliateGrid links={affiliateLinks} />
+              )}
+
               {/* Common Mistakes */}
               {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
                 <section className="mt-10">
@@ -444,7 +568,7 @@ export default function PostPage({ post, nav }) {
               {(nav?.prev || nav?.next) && (
                 <section className="mt-12 border-t pt-8">
                   <h2 className="text-xl font-semibold mb-4">More in {category?.title || "DIY HQ"}</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <NavCard label="Previous" item={nav.prev} />
                     <NavCard label="Next" item={nav.next} />
                   </div>
@@ -472,79 +596,22 @@ export default function PostPage({ post, nav }) {
                     ← Back to {category.title}
                   </Link>
                 ) : (
-                  <Link className="text-blue-600 underline" href="/">
-                    ← Back to Home
-                  </Link>
+                  <Link className="text-blue-600 underline" href="/">← Back to Home</Link>
                 )}
                 <div id="share-toolbar" className="opacity-60 text-sm" />
               </footer>
             </article>
           </main>
 
-          {/* RIGHT AD */}
+          {/* RIGHT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
+              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
             </div>
           </aside>
         </div>
       </div>
     </>
-  );
-}
-
-/* Small helpers (local to file) */
-function MetaKV({ label, value }) {
-  if (!value) return null;
-  return (
-    <div className="flex flex-col min-w-[8rem]">
-      <span className="text-[10px] uppercase tracking-wide opacity-60">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
-    </div>
-  );
-}
-
-function StringBody({ text }) {
-  const cleaned = sanitizePlainText(text);
-  const paragraphs = cleaned
-    .split(/\r?\n\s*\r?\n/g)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (paragraphs.length === 0) return null;
-  return (
-    <div className="prose lg:prose-lg max-w-none">
-      {paragraphs.map((p, i) => (
-        <p key={i}>{p}</p>
-      ))}
-    </div>
-  );
-}
-
-function maybeEmbed(videoURL) {
-  if (!videoURL) return null;
-  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
-  if (isYouTube) {
-    let id = "";
-    const m1 = videoURL.match(/v=([^&]+)/);
-    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
-    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
-    if (!id) return null;
-    return (
-      <div className="aspect-video w-full my-8">
-        <iframe
-          className="w-full h-full rounded-xl"
-          src={`https://www.youtube.com/embed/${id}`}
-          title="Video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="my-8">
-      <video className="w-full rounded-xl" src={videoURL} controls />
-    </div>
   );
 }
 
@@ -556,16 +623,12 @@ export async function getStaticProps({ params }) {
     if (!raw) return { notFound: true, revalidate: 60 };
 
     const post = { ...raw };
-
-    // ALWAYS strip editorial boilerplate + sanitize
-    if (Array.isArray(post.body)) post.body = stripEditorialBoilerplate(post.body);
+    if (Array.isArray(post.body)) post.body = sanitizePortableText(post.body);
     if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
     if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
-
     ["toolsNeeded","materialsNeeded","safetyTips","commonMistakes","projectTags"].forEach((k) => {
       if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
     });
-
     if (Array.isArray(post.stepByStepInstructions)) {
       post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
         ...s, title: sanitizePlainText(asString(s?.title)), text: sanitizePlainText(asString(s?.text)),
@@ -580,7 +643,12 @@ export async function getStaticProps({ params }) {
       );
     }
 
-    // Prev/Next
+    // Hide embedded “Recommended Gear / Compare options” blocks
+    if (Array.isArray(post.body)) {
+      const a = post.affiliateLinks || [];
+      post.body = stripBoilerplate(stripRecommended(post.body, a));
+    }
+
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
     const cat  = post?.category?.slug || null;
