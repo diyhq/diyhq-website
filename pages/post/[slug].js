@@ -4,17 +4,19 @@ import Image from "next/image";
 import Link from "next/link";
 import { PortableText } from "@portabletext/react";
 import SocialShareBar from "../../components/SocialShareBar.jsx";
+import LinkCard from "../../components/LinkCard.jsx";
 
 // AdSense only on post pages
 import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
-// -------- Ad slots (replace with real IDs when ready)
-const LEFT_SLOT  = "XXXXXXXXXX";   // left sidebar
-const RIGHT_SLOT = "YYYYYYYYYY";   // right sidebar
-const INART_SLOT = "ZZZZZZZZZZ";   // in-article
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+const LEFT_SLOT  = "XXXXXXXXXX";   // Display (left sidebar)
+const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
+const INART_SLOT = "ZZZZZZZZZZ";   // In-article
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-// -------- GROQ queries
+/* ---------------- GROQ queries ---------------- */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
@@ -30,6 +32,7 @@ const POST_QUERY = `
 }
 `;
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
+
 const NAV_QUERY = `
 {
   "prev": *[
@@ -49,7 +52,7 @@ const NAV_QUERY = `
 }
 `;
 
-// -------- PortableText components (headings nudged up one level for readability)
+/* ---------------- PortableText components ---------------- */
 const ptComponents = {
   block: {
     h1: ({ children }) => <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>,
@@ -84,7 +87,7 @@ const ptComponents = {
   },
 };
 
-// -------- Helpers
+/* ---------------- Helpers (sanitize + strip stubs) ---------------- */
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
@@ -94,7 +97,6 @@ function sanitizePlainText(text) {
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
-
 function sanitizePortableText(blocks) {
   if (!Array.isArray(blocks)) return blocks;
   return blocks.map((b) => {
@@ -110,61 +112,62 @@ function sanitizePortableText(blocks) {
     return b;
   });
 }
-
 function blockText(b) {
   if (!b) return "";
   if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
   return "";
 }
 
-/** Remove "Recommended Gear" section if no affiliate links */
-function stripRecommended(blocks, affiliateLinks) {
+/** Strip “Recommended Gear”, duplicate disclosures, and editor stubs */
+function stripBodyStubs(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
-  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
+
+  const lower = (txt) => (txt || "").toLowerCase();
+
+  const unwantedHeadings = [
+    /recommended\s+gear/,
+    /editor'?s?\s+picks/,
+    /budget\s*&?\s*time\s+signals/,
+    /ready\s+to\s+upgrade\s+your\s+setup\?/,
+    /compare\s+options/,
+  ];
+
+  const disclosureRe = /disclosure:\s*as an amazon associate/i;
 
   let skipping = false;
-  return blocks.filter((b) => {
+  let disclosureSeen = false;
+
+  const out = [];
+  for (const b of blocks) {
     const isHeading =
       b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
-    const text = blockText(b).toLowerCase();
+    const text = lower(blockText(b));
 
     if (isHeading) {
-      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
+      if (unwantedHeadings.some((re) => re.test(text))) {
         skipping = true;
-        return false;
+        continue; // drop this heading
       }
-      if (skipping) skipping = false;
-      return true;
+      if (skipping) skipping = false; // next valid section resumes
     }
 
-    if (skipping) return false;
+    if (skipping) continue;
 
-    if (/^see our pick/i.test(text)) return false;
-    if (/view on amazon/i.test(text)) return false;
-    if (/affiliate code/i.test(text)) return false;
-    if (/^disclosure:.*amazon associate/i.test(text)) return false;
-
-    return true;
-  });
-}
-
-/** NEW: prune orphan / boilerplate headings that appear with no useful content */
-function pruneBoilerplate(blocks) {
-  if (!Array.isArray(blocks)) return blocks;
-  const badHeadings = [
-    /budget\s*&\s*time\s*signals/i,
-    /ready to upgrade your setup\??/i,
-  ];
-  return blocks.filter(b => {
-    if (b?._type === "block" && /^h[1-6]$/i.test(b.style || "")) {
-      const txt = blockText(b);
-      if (badHeadings.some(re => re.test(txt))) return false;
+    // Drop any disclosure paragraph(s) in body; we’ll render a single one later if needed
+    if (!disclosureSeen && disclosureRe.test(text)) {
+      disclosureSeen = true; // don’t push this block
+      continue;
     }
-    // also strip duplicate one‑line “disclosure” stubs if they slipped into body
-    const t = blockText(b).toLowerCase().trim();
-    if (t.startsWith("disclosure: as an amazon associate")) return false;
-    return true;
-  });
+    if (disclosureSeen && disclosureRe.test(text)) continue; // drop duplicates
+
+    // Remove boilerplate “see our pick” / “view on Amazon” stub lines if they appear
+    if (/^see our pick/i.test(text)) continue;
+    if (/view on amazon/i.test(text)) continue;
+
+    out.push(b);
+  }
+
+  return out;
 }
 
 function StringBody({ text }) {
@@ -176,11 +179,12 @@ function StringBody({ text }) {
   if (paragraphs.length === 0) return null;
   return (
     <div className="prose lg:prose-lg max-w-none">
-      {paragraphs.map((p, i) => (<p key={i}>{p}</p>))}
+      {paragraphs.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
     </div>
   );
 }
-
 function kv(label, value) {
   if (!value) return null;
   return (
@@ -190,14 +194,12 @@ function kv(label, value) {
     </div>
   );
 }
-
 function toCurrency(val) {
   if (val == null) return null;
   if (typeof val === "number") return `$${val.toLocaleString()}`;
   if (typeof val === "string") return val;
   return String(val);
 }
-
 function asString(item) {
   if (!item) return null;
   if (typeof item === "string") return item;
@@ -206,35 +208,6 @@ function asString(item) {
   }
   return String(item);
 }
-
-function maybeEmbed(videoURL) {
-  if (!videoURL) return null;
-  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
-  if (isYouTube) {
-    let id = "";
-    const m1 = videoURL.match(/v=([^&]+)/);
-    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
-    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
-    if (!id) return null;
-    return (
-      <div className="aspect-video w-full my-8">
-        <iframe
-          className="w-full h-full rounded-xl"
-          src={`https://www.youtube.com/embed/${id}`}
-          title="Video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="my-8">
-      <video className="w-full rounded-xl" src={videoURL} controls />
-    </div>
-  );
-}
-
 function blocksToPlainText(blocks) {
   try {
     return blocks
@@ -244,37 +217,34 @@ function blocksToPlainText(blocks) {
     return "";
   }
 }
-
 function estimateReadMinutes(post) {
   if (typeof post?.readTime === "number" && post.readTime > 0) return post.readTime;
   let text = "";
   if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
   else if (typeof post?.body === "string") text = post.body;
   const words = text ? text.trim().split(/\s+/).length : 0;
-  const mins = Math.max(1, Math.round(words / 200));
-  return mins;
+  return Math.max(1, Math.round(words / 200));
 }
 
-/** UPDATED: compact card + crisp thumbnail */
+/* ---------------- Small UI helpers ---------------- */
 function NavCard({ label, item }) {
   if (!item) return null;
-  const raw = item?.mainImage?.asset?.url || null;
-  const thumb = raw ? `${raw}?w=160&h=160&fit=crop&auto=format` : null; // <-- sharp
+  const thumb = item?.mainImage?.asset?.url || null;
   const chips = [];
   if (item.difficultyLevel) chips.push(item.difficultyLevel);
-  if (item.readTime)        chips.push(`${item.readTime} min`);
+  if (item.readTime) chips.push(`${item.readTime} min`);
   const cost = toCurrency(item.estimatedCost);
   if (cost) chips.push(cost);
 
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[3.5rem,1fr] gap-3 items-center rounded-md border p-3 hover:bg-gray-50 transition max-w-md"
+      className="group grid grid-cols-[4rem,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
     >
       {thumb ? (
-        <Image src={thumb} alt="" width={56} height={56} className="h-14 w-14 rounded object-cover" />
+        <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
       ) : (
-        <div className="h-14 w-14 rounded bg-gray-100" />
+        <div className="h-16 w-16 rounded bg-gray-100" />
       )}
       <div className="min-w-0">
         <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
@@ -289,25 +259,59 @@ function NavCard({ label, item }) {
   );
 }
 
-function StringTags({ items }) {
-  if (!Array.isArray(items) || items.length === 0) return null;
+function AffiliateLinksSection({ links }) {
+  if (!Array.isArray(links) || links.length === 0) return null;
+
+  // de-dup identical URLs
+  const uniq = Array.from(new Set(links.map((l) => String(l || "").trim()).filter(Boolean)));
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((t, i) => (
-        <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">{asString(t)}</span>
-      ))}
-    </div>
+    <section className="mt-10">
+      <h2 className="text-2xl font-semibold mb-3">Recommended Gear</h2>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {uniq.map((u, i) => (<LinkCard key={i} url={u} />))}
+      </div>
+      <p className="mt-2 text-xs opacity-70">
+        Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra cost to you.
+      </p>
+    </section>
   );
 }
 
-// -------- Page
+/* ---------- Inline in-article ad after the 3rd block ---------- */
+function insertInlineAd(blocks, index = 3) {
+  if (!Array.isArray(blocks)) return blocks;
+  const out = [...blocks];
+  const i = Math.min(Math.max(index, 1), out.length);
+  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
+  return out;
+}
+const ptComponentsWithAd = {
+  ...ptComponents,
+  types: {
+    adMarker: () => (
+      <div className="my-8">
+        <AdSlot
+          slot={INART_SLOT}
+          layout="in-article"
+          format="fluid"
+          style={{ display: 'block', textAlign: 'center' }}
+        />
+      </div>
+    ),
+  },
+};
+
+/* ---------------- Page ---------------- */
 export default function PostPage({ post, nav }) {
   if (!post) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
         <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
-        <div className="mt-6"><Link className="text-blue-600 underline" href="/">Go back home</Link></div>
+        <div className="mt-6">
+          <Link className="text-blue-600 underline" href="/">Go back home</Link>
+        </div>
       </main>
     );
   }
@@ -372,14 +376,18 @@ export default function PostPage({ post, nav }) {
       {/* Load AdSense only on post pages */}
       <AdSenseHead />
 
-      {/* OUTER CONTAINER + GRID */}
+      {/* OUTER CONTAINER + GRID:  sidebars + content */}
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
 
           {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
+              <AdSlot
+                slot={LEFT_SLOT}
+                format="auto"
+                style={{ display: 'block', width: 250, minHeight: 250 }}
+              />
             </div>
           </aside>
 
@@ -417,9 +425,12 @@ export default function PostPage({ post, nav }) {
                   {kv("Skill Level", difficultyLevel)}
                   {kv("Read Time", readMins ? `${readMins} min` : null)}
                   {kv("Estimated Cost", costText)}
-                  {kv("Category",
+                  {kv(
+                    "Category",
                     category?.title && category?.slug ? (
-                      <Link className="underline" href={`/category/${category.slug}`}>{category.title}</Link>
+                      <Link className="underline" href={`/category/${category.slug}`}>
+                        {category.title}
+                      </Link>
                     ) : null
                   )}
                   {kv("Published", dateText)}
@@ -468,7 +479,7 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Body with inline in‑article ad after the 3rd block */}
+              {/* Body with a single inline in-article ad */}
               {Array.isArray(body) ? (
                 <div className="prose lg:prose-lg max-w-none">
                   <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
@@ -478,6 +489,9 @@ export default function PostPage({ post, nav }) {
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
               )}
+
+              {/* Affiliate links (visual cards) */}
+              <AffiliateLinksSection links={affiliateLinks} />
 
               {/* Video */}
               {maybeEmbed(videoURL)}
@@ -491,13 +505,19 @@ export default function PostPage({ post, nav }) {
                       const stepText = asString(s?.text) || asString(s);
                       const stepTitle = s?.title ? String(s.title) : null;
                       const stepImage = s?.image?.asset?.url || null;
-                      const stepAlt   = s?.image?.alt || stepTitle || `Step ${i + 1}`;
+                      const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
                       return (
                         <li key={i}>
                           {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
                           {stepText && <p className="mb-3">{stepText}</p>}
                           {stepImage && (
-                            <Image src={`${stepImage}?w=1200&auto=format`} alt={stepAlt} width={1200} height={675} className="rounded-lg mt-2" />
+                            <Image
+                              src={stepImage}
+                              alt={stepAlt}
+                              width={1200}
+                              height={675}
+                              className="rounded-lg mt-2"
+                            />
                           )}
                         </li>
                       );
@@ -510,7 +530,9 @@ export default function PostPage({ post, nav }) {
               {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
-                  <ul className="list-disc pl-6 space-y-2">{commonMistakes.map((c, i) => (<li key={i}>{asString(c)}</li>))}</ul>
+                  <ul className="list-disc pl-6 space-y-2">
+                    {commonMistakes.map((c, i) => (<li key={i}>{asString(c)}</li>))}
+                  </ul>
                 </section>
               )}
 
@@ -521,7 +543,7 @@ export default function PostPage({ post, nav }) {
                   <div className="space-y-6">
                     {faqWithAnswers.map((f, i) => {
                       const q = f?.question || f?.q || `Question ${i + 1}`;
-                      const a = f?.answer   || f?.a || "";
+                      const a = f?.answer || f?.a || "";
                       return (
                         <div key={i} className="rounded-lg border p-4">
                           <div className="font-medium">{q}</div>
@@ -533,15 +555,15 @@ export default function PostPage({ post, nav }) {
                 </section>
               )}
 
-              {/* Prev / Next (now compact and centered) */}
+              {/* Prev / Next */}
               {(nav?.prev || nav?.next) && (
                 <section className="mt-12 border-t pt-8">
                   <h2 className="text-xl font-semibold mb-4">
                     More in {category?.title || "DIY HQ"}
                   </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
+                  <div className="grid grid-cols-2 gap-3">
                     <NavCard label="Previous" item={nav.prev} />
-                    <NavCard label="Next"     item={nav.next} />
+                    <NavCard label="Next" item={nav.next} />
                   </div>
                 </section>
               )}
@@ -550,7 +572,13 @@ export default function PostPage({ post, nav }) {
               {Array.isArray(projectTags) && projectTags.length > 0 && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-3">Tags</h2>
-                  <StringTags items={projectTags} />
+                  <div className="flex flex-wrap gap-2">
+                    {projectTags.map((t, i) => (
+                      <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
+                        {asString(t)}
+                      </span>
+                    ))}
+                  </div>
                 </section>
               )}
 
@@ -573,7 +601,11 @@ export default function PostPage({ post, nav }) {
           {/* RIGHT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: 'block', width: 250, minHeight: 250 }} />
+              <AdSlot
+                slot={RIGHT_SLOT}
+                format="auto"
+                style={{ display: 'block', width: 250, minHeight: 250 }}
+              />
             </div>
           </aside>
         </div>
@@ -582,32 +614,36 @@ export default function PostPage({ post, nav }) {
   );
 }
 
-// ---------- Inline ad injection ----------
-function insertInlineAd(blocks, index = 3) {
-  if (!Array.isArray(blocks)) return blocks;
-  const out = [...blocks];
-  const i = Math.min(Math.max(index, 1), out.length);
-  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
-  return out;
-}
-
-const ptComponentsWithAd = {
-  ...ptComponents,
-  types: {
-    adMarker: () => (
-      <div className="my-8">
-        <AdSlot
-          slot={INART_SLOT}
-          layout="in-article"
-          format="fluid"
-          style={{ display: 'block', textAlign: 'center' }}
+/* ---------------- Misc helpers used in the component ---------------- */
+function maybeEmbed(videoURL) {
+  if (!videoURL) return null;
+  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
+  if (isYouTube) {
+    let id = "";
+    const m1 = videoURL.match(/v=([^&]+)/);
+    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
+    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
+    if (!id) return null;
+    return (
+      <div className="aspect-video w-full my-8">
+        <iframe
+          className="w-full h-full rounded-xl"
+          src={`https://www.youtube.com/embed/${id}`}
+          title="Video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
         />
       </div>
-    ),
-  },
-};
+    );
+  }
+  return (
+    <div className="my-8">
+      <video className="w-full rounded-xl" src={videoURL} controls />
+    </div>
+  );
+}
 
-// ---------- Data fetching ----------
+/* ---------------- Data fetching ---------------- */
 export async function getStaticProps({ params }) {
   try {
     const { client } = await import("../../lib/sanity.client");
@@ -630,17 +666,15 @@ export async function getStaticProps({ params }) {
       post.faq = post.faq.map((f) =>
         typeof f === "object"
           ? { ...f, question: sanitizePlainText(asString(f?.question || f?.q)),
-                    answer:   sanitizePlainText(asString(f?.answer   || f?.a)) }
+                    answer: sanitizePlainText(asString(f?.answer || f?.a)) }
           : sanitizePlainText(asString(f))
       );
     }
 
-    // remove templated sections when no affiliate links
-    if (Array.isArray(post.body)) {
-      post.body = stripRecommended(post.body, post.affiliateLinks);
-      post.body = pruneBoilerplate(post.body); // <-- NEW
-    }
+    // Remove stubs / duplicates from body (and recommended-gear placeholder headings)
+    if (Array.isArray(post.body)) post.body = stripBodyStubs(post.body, post.affiliateLinks);
 
+    // Prev/Next
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
     const cat  = post?.category?.slug || null;
