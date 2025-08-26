@@ -2,95 +2,68 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
-function isHttpUrl(u) {
-  if (typeof u !== "string") return false;
-  const s = u.trim();
-  if (!/^https?:\/\//i.test(s)) return false;
-  try {
-    // guard: only call new URL when it looks like a URL
-    new URL(s);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function hostFrom(u) {
-  try {
-    return new URL(u).hostname.replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-}
-
 export default function AffiliateCard({ url }) {
-  const valid = isHttpUrl(url);
-  const [data, setData] = useState({
+  const [state, setState] = useState({
+    loading: true,
     title: null,
     description: null,
     image: null,
+    finalUrl: url,
   });
 
-  // Fetch preview only for valid URLs
   useEffect(() => {
-    let on = true;
-    if (!valid) return;
+    let alive = true;
     (async () => {
       try {
-        const res = await fetch(
-          `/api/affiliate-preview?url=${encodeURIComponent(url)}`
-        );
-        const json = await res.json();
-        if (on) setData(json || {});
+        const r = await fetch(`/api/affiliate-preview?url=${encodeURIComponent(url)}`);
+        const j = await r.json();
+        if (!alive) return;
+        setState({
+          loading: false,
+          title: j.title || "View →",
+          description: j.description || "",
+          image: j.image || null,
+          finalUrl: j.url || url,
+        });
       } catch {
-        /* ignore */
+        if (!alive) return;
+        setState((s) => ({ ...s, loading: false }));
       }
     })();
-    return () => {
-      on = false;
-    };
-  }, [url, valid]);
-
-  const domain = valid ? hostFrom(url) : null;
-  const title =
-    data.title ||
-    (valid ? domain : null) ||
-    "Amazon product"; // final fallback
+    return () => { alive = false; };
+  }, [url]);
 
   return (
     <a
-      href={valid ? url : undefined}
+      href={state.finalUrl || url}
       target="_blank"
-      rel="nofollow sponsored noopener noreferrer"
-      className="block rounded-lg border p-3 hover:bg-gray-50 transition"
-      aria-label={valid ? `View ${title}` : "View on Amazon"}
+      rel="nofollow sponsored noopener"
+      className="block rounded-lg border bg-white hover:shadow-md transition"
     >
-      {/* compact horizontal row: thumbnail left, text right */}
-      <div className="grid grid-cols-[80px,1fr] items-center gap-3">
-        <div className="h-20 w-20 rounded border bg-white overflow-hidden flex items-center justify-center">
-          {data.image ? (
+      <div className="grid grid-cols-[80px,1fr] gap-3 p-3 items-center">
+        <div className="w-20 h-20 rounded bg-gray-50 overflow-hidden flex items-center justify-center">
+          {state.image ? (
             <Image
-              src={data.image}
+              src={state.image}
               alt=""
               width={80}
               height={80}
-              className="h-20 w-20 object-contain"
+              className="w-20 h-20 object-contain"
             />
           ) : (
-            <span className="text-xs opacity-50">Preview</span>
+            <span className="text-[10px] uppercase tracking-wider text-gray-400">Preview</span>
           )}
         </div>
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-wide opacity-60">
-            {domain || "amzn.to"}
+          <div className="text-sm font-medium leading-snug line-clamp-2">
+            {state.title || "View →"}
           </div>
-          <div className="font-medium leading-snug line-clamp-2">{title}</div>
-          {data.description && (
-            <div className="text-sm opacity-70 line-clamp-1">
-              {data.description}
+          {state.description && (
+            <div className="mt-1 text-xs opacity-70 line-clamp-2">
+              {state.description}
             </div>
           )}
-          <div className="mt-1 text-sm font-medium text-blue-600">View →</div>
+          <div className="mt-1 text-xs text-blue-600">View →</div>
         </div>
       </div>
     </a>
