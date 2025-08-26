@@ -3,28 +3,30 @@ const nextConfig = {
   reactStrictMode: true,
   trailingSlash: false,
 
-  // Enable Next/Image for Sanity + Amazon product thumbnails
+  // Images (Next/Image + plain <img> fallback in affiliate cards)
   images: {
-    formats: ['image/avif', 'image/webp'],
+    domains: ["cdn.sanity.io"],
     remotePatterns: [
-      // Sanity
-      { protocol: 'https', hostname: 'cdn.sanity.io' },
-
-      // Amazon product images (old + new hosts)
-      { protocol: 'https', hostname: 'm.media-amazon.com', pathname: '/images/*' },
-      { protocol: 'https', hostname: 'images-na.ssl-images-amazon.com', pathname: '/images/*' },
-      { protocol: 'https', hostname: 'ssl-images-amazon.com', pathname: '/images/*' },
+      { protocol: "https", hostname: "m.media-amazon.com", pathname: "/images/**" },
+      { protocol: "https", hostname: "images-na.ssl-images-amazon.com", pathname: "/images/**" },
+      { protocol: "https", hostname: "ssl-images-amazon.com", pathname: "/images/**" },
     ],
   },
 
-  // Keep sitemap fresh (no CDN/browser caching) and correct MIME
+  // i18n scaffold: EN default + ES
+  i18n: {
+    locales: ["en", "es"],
+    defaultLocale: "en",
+    localeDetection: true,
+  },
+
   async headers() {
     return [
       {
-        source: '/sitemap.xml',
+        source: "/sitemap.xml",
         headers: [
-          { key: 'Cache-Control', value: 'no-store' },
-          { key: 'Content-Type', value: 'application/xml; charset=utf-8' },
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Content-Type", value: "application/xml; charset=utf-8" },
         ],
       },
     ];

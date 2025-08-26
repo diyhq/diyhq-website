@@ -1,10 +1,11 @@
 // pages/post/[slug].js
+import { useEffect, useState } from "react";
 import Head from "next/head";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { PortableText } from "@portabletext/react";
 import SocialShareBar from "../../components/SocialShareBar.jsx";
-import LinkCard from "../../components/LinkCard.jsx";
 
 // AdSense only on post pages
 import AdSenseHead from "../../components/AdSenseHead.jsx";
@@ -16,7 +17,7 @@ const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
 const INART_SLOT = "ZZZZZZZZZZ";   // In-article
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-/* ---------------- GROQ queries ---------------- */
+/** Sanity queries */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
@@ -31,6 +32,7 @@ const POST_QUERY = `
   body
 }
 `;
+
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
 
 const NAV_QUERY = `
@@ -87,7 +89,7 @@ const ptComponents = {
   },
 };
 
-/* ---------------- Helpers (sanitize + strip stubs) ---------------- */
+/* ---------------- helpers ---------------- */
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
@@ -116,83 +118,6 @@ function blockText(b) {
   if (!b) return "";
   if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
   return "";
-}
-
-/** Strip “Recommended Gear”, duplicate disclosures, and editor stubs */
-function stripBodyStubs(blocks, affiliateLinks) {
-  if (!Array.isArray(blocks)) return blocks;
-
-  const lower = (txt) => (txt || "").toLowerCase();
-
-  const unwantedHeadings = [
-    /recommended\s+gear/,
-    /editor'?s?\s+picks/,
-    /budget\s*&?\s*time\s+signals/,
-    /ready\s+to\s+upgrade\s+your\s+setup\?/,
-    /compare\s+options/,
-  ];
-
-  const disclosureRe = /disclosure:\s*as an amazon associate/i;
-
-  let skipping = false;
-  let disclosureSeen = false;
-
-  const out = [];
-  for (const b of blocks) {
-    const isHeading =
-      b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
-    const text = lower(blockText(b));
-
-    if (isHeading) {
-      if (unwantedHeadings.some((re) => re.test(text))) {
-        skipping = true;
-        continue; // drop this heading
-      }
-      if (skipping) skipping = false; // next valid section resumes
-    }
-
-    if (skipping) continue;
-
-    // Drop any disclosure paragraph(s) in body; we’ll render a single one later if needed
-    if (!disclosureSeen && disclosureRe.test(text)) {
-      disclosureSeen = true; // don’t push this block
-      continue;
-    }
-    if (disclosureSeen && disclosureRe.test(text)) continue; // drop duplicates
-
-    // Remove boilerplate “see our pick” / “view on Amazon” stub lines if they appear
-    if (/^see our pick/i.test(text)) continue;
-    if (/view on amazon/i.test(text)) continue;
-
-    out.push(b);
-  }
-
-  return out;
-}
-
-function StringBody({ text }) {
-  const cleaned = sanitizePlainText(text);
-  const paragraphs = cleaned
-    .split(/\r?\n\s*\r?\n/g)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (paragraphs.length === 0) return null;
-  return (
-    <div className="prose lg:prose-lg max-w-none">
-      {paragraphs.map((p, i) => (
-        <p key={i}>{p}</p>
-      ))}
-    </div>
-  );
-}
-function kv(label, value) {
-  if (!value) return null;
-  return (
-    <div className="flex flex-col min-w-[8rem]">
-      <span className="text-[10px] uppercase tracking-wide opacity-60">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
-    </div>
-  );
 }
 function toCurrency(val) {
   if (val == null) return null;
@@ -223,67 +148,57 @@ function estimateReadMinutes(post) {
   if (Array.isArray(post?.body)) text = blocksToPlainText(post.body);
   else if (typeof post?.body === "string") text = post.body;
   const words = text ? text.trim().split(/\s+/).length : 0;
-  return Math.max(1, Math.round(words / 200));
+  const mins = Math.max(1, Math.round(words / 200));
+  return mins;
 }
 
-/* ---------------- Small UI helpers ---------------- */
-function NavCard({ label, item }) {
-  if (!item) return null;
-  const thumb = item?.mainImage?.asset?.url || null;
-  const chips = [];
-  if (item.difficultyLevel) chips.push(item.difficultyLevel);
-  if (item.readTime) chips.push(`${item.readTime} min`);
-  const cost = toCurrency(item.estimatedCost);
-  if (cost) chips.push(cost);
+/** Remove "Recommended Gear" and ALSO "Troubleshooting & Fix-Ups/Common Issues..." if present */
+function stripRecommended(blocks, affiliateLinks) {
+  if (!Array.isArray(blocks)) return blocks;
+  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) {
+    // keep content; just avoid duplicate boilerplate below
+  }
 
-  return (
-    <Link
-      href={`/post/${item.slug}`}
-      className="group grid grid-cols-[4rem,1fr] gap-3 items-center rounded-lg border p-3 hover:bg-gray-50 transition"
-    >
-      {thumb ? (
-        <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
-      ) : (
-        <div className="h-16 w-16 rounded bg-gray-100" />
-      )}
-      <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wide opacity-60">{label}</div>
-        <div className="mt-1 font-medium group-hover:underline line-clamp-2">{item.title}</div>
-        {chips.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-70">
-            {chips.map((c, i) => (<span key={i}>{c}</span>))}
-          </div>
-        )}
-      </div>
-    </Link>
-  );
+  let skipping = false;
+  return blocks.filter((b) => {
+    const isHeading =
+      b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
+    const text = blockText(b).toLowerCase();
+
+    // Start skipping at these headings
+    if (isHeading) {
+      if (
+        /recommended\s+gear/.test(text) ||
+        /editor'?s?\s+picks/.test(text) ||
+        /recommended\s+picks/.test(text) ||
+        /troubleshooting/.test(text) ||
+        /common issues you may encounter/.test(text)
+      ) {
+        skipping = true;
+        return false;
+      }
+      if (skipping) skipping = false;
+      return true;
+    }
+
+    if (skipping) return false;
+
+    // scrub stock lines we don't want
+    if (/^see our pick/i.test(text)) return false;
+    if (/view on amazon/i.test(text)) return false;
+    if (/affiliate code/i.test(text)) return false;
+    if (/^disclosure:.*amazon associate/i.test(text)) return false;
+
+    return true;
+  });
 }
 
-function AffiliateLinksSection({ links }) {
-  if (!Array.isArray(links) || links.length === 0) return null;
-
-  // de-dup identical URLs
-  const uniq = Array.from(new Set(links.map((l) => String(l || "").trim()).filter(Boolean)));
-
-  return (
-    <section className="mt-10">
-      <h2 className="text-2xl font-semibold mb-3">Recommended Gear</h2>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {uniq.map((u, i) => (<LinkCard key={i} url={u} />))}
-      </div>
-      <p className="mt-2 text-xs opacity-70">
-        Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra cost to you.
-      </p>
-    </section>
-  );
-}
-
-/* ---------- Inline in-article ad after the 3rd block ---------- */
+/* ---------- In-article ad marker ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
   const i = Math.min(Math.max(index, 1), out.length);
-  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
+  out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
   return out;
 }
 const ptComponentsWithAd = {
@@ -295,15 +210,93 @@ const ptComponentsWithAd = {
           slot={INART_SLOT}
           layout="in-article"
           format="fluid"
-          style={{ display: 'block', textAlign: 'center' }}
+          style={{ display: "block", textAlign: "center" }}
         />
       </div>
     ),
   },
 };
 
+/* ---------- Affiliate Grid (thumbnails) ---------- */
+const PLACEHOLDER_SVG =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'>
+      <rect width='100%' height='100%' fill='#f3f4f6'/>
+      <g fill='#9ca3af' font-size='20' font-family='Arial,Helvetica,sans-serif'>
+        <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'>Preview</text>
+      </g>
+    </svg>`
+  );
+
+function AffiliateGrid({ links }) {
+  const [cards, setCards] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    async function run() {
+      const reqs = (links || []).map(async (url) => {
+        try {
+          const r = await fetch(`/api/affiliate-preview?url=${encodeURIComponent(url)}`);
+          const j = await r.json();
+          return { url, ...j };
+        } catch {
+          return { url, ok: false };
+        }
+      });
+      const out = await Promise.all(reqs);
+      if (alive) setCards(out);
+    }
+    run();
+    return () => {
+      alive = false;
+    };
+  }, [links]);
+
+  if (!links || links.length === 0) return null;
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-2xl font-semibold mb-3">Recommended Gear</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {cards.map((c, i) => (
+          <a
+            key={i}
+            href={c.url}
+            target="_blank"
+            rel="nofollow sponsored noopener"
+            className="block rounded-lg border hover:shadow-md transition bg-white overflow-hidden"
+          >
+            <div className="aspect-[4/3] w-full bg-gray-50">
+              <img
+                src={c.image || PLACEHOLDER_SVG}
+                alt={c.title || "Product"}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="p-3">
+              <div className="text-sm font-medium line-clamp-2">
+                {c.title || "View on Amazon"}
+              </div>
+              <div className="mt-2 text-xs text-blue-600 underline">View</div>
+            </div>
+          </a>
+        ))}
+      </div>
+      <p className="mt-2 text-xs opacity-70">
+        Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra cost to you.
+      </p>
+    </section>
+  );
+}
+
 /* ---------------- Page ---------------- */
 export default function PostPage({ post, nav }) {
+  const router = useRouter();
+  const locale = router.locale || "en";
+
   if (!post) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
@@ -336,6 +329,7 @@ export default function PostPage({ post, nav }) {
   const costText = toCurrency(estimatedCost);
 
   const canonicalUrl = `https://www.doityourselfhq.com/post/${slug}`;
+  const esUrl = `https://www.doityourselfhq.com/es/post/${slug}`;
   const articleLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -343,7 +337,7 @@ export default function PostPage({ post, nav }) {
     image: imageUrl ? [imageUrl] : undefined,
     datePublished: publishedAt || _createdAt || undefined,
     articleSection: category?.title || undefined,
-    author: [{ "@type": "Person", name: author?.name || authorAIName || "DIY HQ Team" }],
+    author: [{ "@type": "Person", name: author?.name || authorAIName || "DIY HQ Team" } ],
     keywords: Array.isArray(projectTags) ? projectTags.map(asString).join(", ") : undefined,
     description: metaDesc,
   };
@@ -361,12 +355,20 @@ export default function PostPage({ post, nav }) {
       <Head>
         <title>{metaTitle} | DIY HQ</title>
         {metaDesc && <meta name="description" content={metaDesc} />}
+
+        {/* OpenGraph */}
         {imageUrl && <meta property="og:image" content={imageUrl} />}
         <meta property="og:title" content={metaTitle} />
         {metaDesc && <meta property="og:description" content={metaDesc} />}
         <meta property="og:type" content="article" />
         <meta property="og:url" content={canonicalUrl} />
+
+        {/* Canonical + hreflang alternates */}
         <link rel="canonical" href={canonicalUrl} />
+        <link rel="alternate" hrefLang="en" href={canonicalUrl} />
+        <link rel="alternate" hrefLang="es" href={esUrl} />
+        <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
+
         {(publishedAt || _createdAt) && (
           <meta property="article:published_time" content={publishedAt || _createdAt} />
         )}
@@ -376,7 +378,7 @@ export default function PostPage({ post, nav }) {
       {/* Load AdSense only on post pages */}
       <AdSenseHead />
 
-      {/* OUTER CONTAINER + GRID:  sidebars + content */}
+      {/* OUTER CONTAINER + GRID: [250px ad | 900px article | 250px ad] */}
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 xl:grid-cols-[250px_minmax(0,900px)_250px] gap-8">
 
@@ -418,22 +420,39 @@ export default function PostPage({ post, nav }) {
                 </div>
               )}
 
-              {/* Meta row under hero */}
+              {/* Meta row */}
               <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                  {kv("Author", author?.name || authorAIName)}
-                  {kv("Skill Level", difficultyLevel)}
-                  {kv("Read Time", readMins ? `${readMins} min` : null)}
-                  {kv("Estimated Cost", costText)}
-                  {kv(
-                    "Category",
-                    category?.title && category?.slug ? (
-                      <Link className="underline" href={`/category/${category.slug}`}>
-                        {category.title}
-                      </Link>
-                    ) : null
-                  )}
-                  {kv("Published", dateText)}
+                  <div className="flex flex-col min-w-[8rem]">
+                    <span className="text-[10px] uppercase tracking-wide opacity-60">Author</span>
+                    <span className="text-sm font-medium">{author?.name || authorAIName}</span>
+                  </div>
+                  <div className="flex flex-col min-w-[8rem]">
+                    <span className="text-[10px] uppercase tracking-wide opacity-60">Skill Level</span>
+                    <span className="text-sm font-medium">{difficultyLevel || "-"}</span>
+                  </div>
+                  <div className="flex flex-col min-w-[8rem]">
+                    <span className="text-[10px] uppercase tracking-wide opacity-60">Read Time</span>
+                    <span className="text-sm font-medium">{readMins ? `${readMins} min` : "-"}</span>
+                  </div>
+                  <div className="flex flex-col min-w-[8rem]">
+                    <span className="text-[10px] uppercase tracking-wide opacity-60">Estimated Cost</span>
+                    <span className="text-sm font-medium">{toCurrency(estimatedCost) || "-"}</span>
+                  </div>
+                  <div className="flex flex-col min-w-[8rem]">
+                    <span className="text-[10px] uppercase tracking-wide opacity-60">Category</span>
+                    <span className="text-sm font-medium">
+                      {category?.title && category?.slug ? (
+                        <Link className="underline" href={`/category/${category.slug}`}>
+                          {category.title}
+                        </Link>
+                      ) : "-"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col min-w-[8rem]">
+                    <span className="text-[10px] uppercase tracking-wide opacity-60">Published</span>
+                    <span className="text-sm font-medium">{dateText || "-"}</span>
+                  </div>
                 </div>
               </section>
 
@@ -479,52 +498,36 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Body with a single inline in-article ad */}
+              {/* Body with inline ad after the 3rd block */}
               {Array.isArray(body) ? (
                 <div className="prose lg:prose-lg max-w-none">
                   <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
                 </div>
               ) : typeof body === "string" && body.trim().length > 0 ? (
-                <StringBody text={body} />
+                <div className="prose lg:prose-lg max-w-none"><p>{body}</p></div>
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
               )}
 
-              {/* Affiliate links (visual cards) */}
-              <AffiliateLinksSection links={affiliateLinks} />
+              {/* Affiliate grid */}
+              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
+                <AffiliateGrid links={affiliateLinks.map(asString)} />
+              )}
 
               {/* Video */}
-              {maybeEmbed(videoURL)}
-
-              {/* Step-by-step */}
-              {steps.length > 0 && (
-                <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
-                  <ol className="list-decimal pl-6 space-y-6">
-                    {steps.map((s, i) => {
-                      const stepText = asString(s?.text) || asString(s);
-                      const stepTitle = s?.title ? String(s.title) : null;
-                      const stepImage = s?.image?.asset?.url || null;
-                      const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
-                      return (
-                        <li key={i}>
-                          {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
-                          {stepText && <p className="mb-3">{stepText}</p>}
-                          {stepImage && (
-                            <Image
-                              src={stepImage}
-                              alt={stepAlt}
-                              width={1200}
-                              height={675}
-                              className="rounded-lg mt-2"
-                            />
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </section>
-              )}
+              {videoURL ? (
+                <div className="aspect-video w-full my-8">
+                  <iframe
+                    className="w-full h-full rounded-xl"
+                    src={videoURL.includes("youtube.com") || videoURL.includes("youtu.be")
+                      ? `https://www.youtube.com/embed/${(videoURL.match(/v=([^&]+)/)?.[1]) || (videoURL.match(/youtu\.be\/([^?]+)/)?.[1]) || ""}`
+                      : videoURL}
+                    title="Video"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+              ) : null}
 
               {/* Common Mistakes */}
               {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
@@ -554,47 +557,6 @@ export default function PostPage({ post, nav }) {
                   </div>
                 </section>
               )}
-
-              {/* Prev / Next */}
-              {(nav?.prev || nav?.next) && (
-                <section className="mt-12 border-t pt-8">
-                  <h2 className="text-xl font-semibold mb-4">
-                    More in {category?.title || "DIY HQ"}
-                  </h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    <NavCard label="Previous" item={nav.prev} />
-                    <NavCard label="Next" item={nav.next} />
-                  </div>
-                </section>
-              )}
-
-              {/* Tags */}
-              {Array.isArray(projectTags) && projectTags.length > 0 && (
-                <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-3">Tags</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {projectTags.map((t, i) => (
-                      <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
-                        {asString(t)}
-                      </span>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Footer nav */}
-              <footer className="mt-12 flex items-center justify-between">
-                {category?.slug ? (
-                  <Link className="text-blue-600 underline" href={`/category/${category.slug}`}>
-                    ← Back to {category.title}
-                  </Link>
-                ) : (
-                  <Link className="text-blue-600 underline" href="/">
-                    ← Back to Home
-                  </Link>
-                )}
-                <div id="share-toolbar" className="opacity-60 text-sm" />
-              </footer>
             </article>
           </main>
 
@@ -611,35 +573,6 @@ export default function PostPage({ post, nav }) {
         </div>
       </div>
     </>
-  );
-}
-
-/* ---------------- Misc helpers used in the component ---------------- */
-function maybeEmbed(videoURL) {
-  if (!videoURL) return null;
-  const isYouTube = /youtu\.be|youtube\.com/.test(videoURL);
-  if (isYouTube) {
-    let id = "";
-    const m1 = videoURL.match(/v=([^&]+)/);
-    const m2 = videoURL.match(/youtu\.be\/([^?]+)/);
-    id = (m1 && m1[1]) || (m2 && m2[1]) || "";
-    if (!id) return null;
-    return (
-      <div className="aspect-video w-full my-8">
-        <iframe
-          className="w-full h-full rounded-xl"
-          src={`https://www.youtube.com/embed/${id}`}
-          title="Video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="my-8">
-      <video className="w-full rounded-xl" src={videoURL} controls />
-    </div>
   );
 }
 
@@ -671,10 +604,9 @@ export async function getStaticProps({ params }) {
       );
     }
 
-    // Remove stubs / duplicates from body (and recommended-gear placeholder headings)
-    if (Array.isArray(post.body)) post.body = stripBodyStubs(post.body, post.affiliateLinks);
+    // strip "Recommended Gear" + "Troubleshooting & Fix-Ups" duplicates
+    if (Array.isArray(post.body)) post.body = stripRecommended(post.body, post.affiliateLinks);
 
-    // Prev/Next
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
     const cat  = post?.category?.slug || null;
