@@ -4,22 +4,18 @@ import Image from "next/image";
 import Link from "next/link";
 import { PortableText } from "@portabletext/react";
 import SocialShareBar from "../../components/SocialShareBar.jsx";
-import AffiliateCard from "../../components/AffiliateCard.jsx";
+import AffiliateGrid from "../../components/AffiliateGrid.jsx";
 
 // AdSense only on post pages
 import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-// TODO: Replace these with your real AdSense slot IDs once approved
 const LEFT_SLOT  = "XXXXXXXXXX";   // Display (left sidebar)
 const RIGHT_SLOT = "YYYYYYYYYY";   // Display (right sidebar)
 const INART_SLOT = "ZZZZZZZZZZ";   // In-article
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-/**
- * Pull everything we use; prefer normalized category ref with legacy fallback.
- */
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
@@ -37,7 +33,6 @@ const POST_QUERY = `
 
 const SLUGS_QUERY = `*[_type == "post" && defined(slug.current)][].slug.current`;
 
-/** Prev/Next in same category by publishedAt (fallback _createdAt), including UI meta. */
 const NAV_QUERY = `
 {
   "prev": *[
@@ -125,20 +120,15 @@ function blockText(b) {
   return "";
 }
 
-/** Strip boilerplate/duplicates from Sanity body (e.g., Troubleshooting, Ready to upgrade, Budget & Time, duplicate Disclosure, “Recommended Gear” text blocks, etc.). */
-function stripBoilerplate(blocks, affiliateLinks) {
+/** Remove boilerplate sections we don’t want to show */
+function stripUnwantedSections(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
 
-  // When affiliate links exist we always show the card grid below; remove any inline text-based “Recommended Gear / Editor’s Picks” sections.
-  const removeHeadings = [
-    /recommended\s+gear/i,
-    /editor'?s?\s+picks/i,
-    /troubleshooting.*fix/i,
-    /common\s+issues/i,
-    /budget.*time\s+signals/i,
-    /ready\s+to\s+upgrade/i,
-    // You can keep/remove "Conclusion" as desired; this removes duplicate conclusions that sometimes show up.
-    // /conclusion/i,
+  const unwantedHeadings = [
+    /budget\s*&\s*time\s*signals/i,
+    /ready\s*to\s*upgrade/i,
+    /troubleshooting\s*&?\s*fix(-|\s*)ups?/i,
+    /common\s*issues\s*you\s*may\s*encounter/i,
   ];
 
   let skipping = false;
@@ -148,21 +138,21 @@ function stripBoilerplate(blocks, affiliateLinks) {
     const text = blockText(b).toLowerCase();
 
     if (isHeading) {
-      if (removeHeadings.some((re) => re.test(text))) {
+      // Hide boilerplate headings
+      if (unwantedHeadings.some((rx) => rx.test(text))) {
         skipping = true;
         return false;
       }
-      skipping = false;
-      return true;
+      // Stop skipping when a new section starts
+      if (skipping) skipping = false;
     }
 
     if (skipping) return false;
 
-    // remove duplicate disclosure or text stubs that often accompany affiliate blocks in raw body
-    if (/^disclosure:/.test(text)) return false;
-    if (/^see our pick/i.test(text)) return false;
-    if (/view on amazon/i.test(text)) return false;
-    if (/affiliate code/i.test(text)) return false;
+    // If there are no affiliate links, also strip any “Recommended Gear” headings
+    if (!Array.isArray(affiliateLinks) || affiliateLinks.length === 0) {
+      if (/recommended\s+gear|editor'?s?\s*picks/i.test(text)) return false;
+    }
 
     return true;
   });
@@ -241,7 +231,7 @@ function maybeEmbed(videoURL) {
 function blocksToPlainText(blocks) {
   try {
     return blocks
-      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""))
+      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : "")) //
       .join("\n");
   } catch {
     return "";
@@ -292,7 +282,7 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- Inline in-article ad helper ---------- */
+/* ---------- Inline in-article ad after the 3rd block ---------- */
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
@@ -325,7 +315,9 @@ export default function PostPage({ post, nav }) {
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
         <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
         <div className="mt-6">
-          <Link className="text-blue-600 underline" href="/">Go back home</Link>
+          <Link className="text-blue-600 underline" href="/">
+            Go back home
+          </Link>
         </div>
       </main>
     );
@@ -370,6 +362,9 @@ export default function PostPage({ post, nav }) {
   const faqWithAnswers =
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
+
+  // Body cleanup: hide boilerplate / duplicates
+  const bodyClean = Array.isArray(body) ? stripUnwantedSections(body, affiliateLinks) : body;
 
   return (
     <>
@@ -422,7 +417,7 @@ export default function PostPage({ post, nav }) {
                     alt={imageAlt}
                     width={1200}
                     height={630}
-                    className="w-full h-auto rounded-xl shadow-md"
+                    className="w-full h-auto rounded-xl shadow-sm"
                     priority
                   />
                   {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
@@ -494,38 +489,24 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Recommended Gear — 2×2 grid of affiliate cards */}
-              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
-                <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-4">Recommended Gear</h2>
-                  <div className="grid grid-cols-2 gap-4">
-                    {affiliateLinks
-                      .map(asString)
-                      .filter(Boolean)
-                      .slice(0, 4)
-                      .map((url, i) => (
-                        <AffiliateCard key={i} url={url} />
-                      ))}
-                  </div>
-                  <p className="mt-2 text-xs opacity-70">
-                    Disclosure: As an Amazon Associate, we may earn from qualifying purchases at no extra cost to you.
-                  </p>
-                </section>
-              )}
-
               {/* Body with inline in-article ad after the 3rd block */}
-              {Array.isArray(body) ? (
+              {Array.isArray(bodyClean) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText value={insertInlineAd(body, 3)} components={ptComponentsWithAd} />
+                  <PortableText value={insertInlineAd(bodyClean, 3)} components={ptComponentsWithAd} />
                 </div>
-              ) : typeof body === "string" && body.trim().length > 0 ? (
-                <StringBody text={body} />
+              ) : typeof bodyClean === "string" && bodyClean.trim().length > 0 ? (
+                <StringBody text={bodyClean} />
               ) : (
                 <p className="opacity-70">This article hasn’t been populated with content yet.</p>
               )}
 
               {/* Video */}
               {maybeEmbed(videoURL)}
+
+              {/* Affiliate grid — compact — sits above Common Mistakes */}
+              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
+                <AffiliateGrid links={affiliateLinks} />
+              )}
 
               {/* Step-by-step */}
               {steps.length > 0 && (
@@ -568,7 +549,7 @@ export default function PostPage({ post, nav }) {
               )}
 
               {/* FAQ */}
-              {showFaq && (
+              {Array.isArray(faqWithAnswers) && faqWithAnswers.length > 0 && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
                   <div className="space-y-6">
@@ -673,9 +654,7 @@ export async function getStaticProps({ params }) {
       );
     }
 
-    // Remove boilerplate sections and duplicate “disclosure” text from raw body
-    if (Array.isArray(post.body)) post.body = stripBoilerplate(post.body, post.affiliateLinks);
-
+    // Final pass: keep body, affiliateLinks as-is (grid handles empty)
     let nav = { prev: null, next: null };
     const date = post.publishedAt || post._createdAt || null;
     const cat  = post?.category?.slug || null;
