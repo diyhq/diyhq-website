@@ -51,51 +51,6 @@ const NAV_QUERY = `
 }
 `;
 
-/* ---------------- PortableText components ---------------- */
-const ptComponents = {
-  block: {
-    h1: ({ children }) => (
-      <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>
-    ),
-    h2: ({ children }) => (
-      <h3 className="text-xl font-semibold mt-8 mb-3">{children}</h3>
-    ),
-    h3: ({ children }) => (
-      <h4 className="text-lg font-semibold mt-6 mb-3">{children}</h4>
-    ),
-    normal: ({ children }) => <p className="my-4 leading-7">{children}</p>,
-    blockquote: ({ children }) => (
-      <blockquote className="border-l-4 pl-4 italic my-4">{children}</blockquote>
-    ),
-  },
-  list: {
-    bullet: ({ children }) => (
-      <ul className="list-disc pl-6 my-4 space-y-2">{children}</ul>
-    ),
-    number: ({ children }) => (
-      <ol className="list-decimal pl-6 my-4 space-y-2">{children}</ol>
-    ),
-  },
-  marks: {
-    link: ({ children, value }) => {
-      const href = value?.href || "#";
-      const external = /^https?:\/\//i.test(href);
-      return (
-        <a
-          href={href}
-          target={external ? "_blank" : undefined}
-          rel={external ? "noopener noreferrer" : undefined}
-          className="underline"
-        >
-          {children}
-        </a>
-      );
-    },
-    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-    em: ({ children }) => <em className="italic">{children}</em>,
-  },
-};
-
 /* ---------------- Helpers ---------------- */
 function sanitizePlainText(text) {
   if (text == null) return text;
@@ -160,11 +115,14 @@ function asString(item) {
   return String(item);
 }
 
-/** Remove “Recommended Gear / Compare options / Ready to upgrade …” from the rich body. */
+/** Remove “Recommended Gear / Compare options / Ready to upgrade …”
+ *  and also “Troubleshooting & Fix‑Ups / Common Issues …” from the rich body.
+ */
 function stripBoilerplate(blocks) {
   if (!Array.isArray(blocks)) return blocks;
+
   const killHead =
-    /recommended\s+gear|editor'?s?\s+picks|compare\s+options|ready\s+to\s+upgrade/i;
+    /recommended\s+gear|editor'?s?\s+picks|compare\s+options|ready\s+to\s+upgrade|troubleshooting|fix[-\s]?ups|common\s+issues/i;
   const killLine = /Disclosure:\s*As an Amazon Associate|See our pick/i;
 
   let skipping = false;
@@ -173,20 +131,27 @@ function stripBoilerplate(blocks) {
       b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
     const text = blockText(b);
 
+    // strip matched headings and their following content until the next heading
     if (isHeading && killHead.test(text)) {
       skipping = true;
       return false;
     }
+
     if (isHeading && skipping) {
+      // next heading ends the skip
       skipping = false;
     }
-    if (skipping) return false;
-    if (killLine.test(text)) return false;
+
+    if (skipping) return false; // drop all content inside the section
+    if (killLine.test(text)) return false; // inline boilerplate lines
 
     return true;
   });
 }
 
+/** Hide embedded “Recommended Gear” only when there are no affiliate links on the post.
+ *  (If we DO have links, we keep the body and rely on stripBoilerplate above.)
+ */
 function stripRecommended(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
   if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
@@ -225,6 +190,86 @@ function insertInlineAd(blocks, index = 3) {
   out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
   return out;
 }
+
+/* ---------- Heading promotion rules ---------- */
+/** Any heading whose text matches one of these phrases gets bumped one size. */
+const PROMOTE_RE = new RegExp(
+  [
+    // Group 1
+    "before\\s+you\\s+start",
+    "overview\\s+of\\s+prerequisites",
+    "method\\s+overview",
+    "deep\\s+step\\s+detail",
+    "^pro\\s*tips?$",
+    "when\\s+to\\s+call\\s+a\\s+pro",
+    "budget\\s*&?\\s*time\\s+signals?",
+    "^conclusion$",
+    // Group 2
+    "organizing\\s+your\\s+garage",
+    "lighting\\s+improvements?",
+    "building\\s+a\\s+workbench",
+    "small\\s+wins\\s+to\\s+improve\\s+outcomes?",
+    "recognizing\\s+your\\s+limits",
+    "realistic\\s+ranges?\\s+and\\s+tradeoffs?",
+    "confidence\\s+and\\s+next\\s+steps?",
+  ].join("|"),
+  "i"
+);
+
+/** Map baseline sizes by style; then bump one step for promoted headings. */
+const SIZE_SCALE = ["text-base", "text-lg", "text-xl", "text-2xl", "text-3xl", "text-4xl"];
+const BASE_INDEX = { h3: 1, h2: 2, h1: 3 }; // our visual scale: h3→lg, h2→xl, h1→2xl
+
+function headingClassFor(style, value) {
+  const txt = blockText(value);
+  const baseIdx = BASE_INDEX[String(style).toLowerCase()] ?? 2;
+  const bump = PROMOTE_RE.test(txt) ? 1 : 0;
+  const idx = Math.min(baseIdx + bump, SIZE_SCALE.length - 1);
+  return `${SIZE_SCALE[idx]} font-semibold mt-8 mb-3`;
+}
+
+/* ---------------- PortableText components ---------------- */
+const Heading = (styleTag) =>
+  function HeadingRenderer({ children, value }) {
+    const cls = headingClassFor(styleTag, value);
+    // keep the semantic down‑shift (h1→h2, h2→h3, h3→h4) used in your theme
+    const Tag = styleTag === "h1" ? "h2" : styleTag === "h2" ? "h3" : styleTag === "h3" ? "h4" : "h3";
+    return <Tag className={cls}>{children}</Tag>;
+  };
+
+const ptComponents = {
+  block: {
+    h1: Heading("h1"),
+    h2: Heading("h2"),
+    h3: Heading("h3"),
+    normal: ({ children }) => <p className="my-4 leading-7">{children}</p>,
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-4 pl-4 italic my-4">{children}</blockquote>
+    ),
+  },
+  list: {
+    bullet: ({ children }) => <ul className="list-disc pl-6 my-4 space-y-2">{children}</ul>,
+    number: ({ children }) => <ol className="list-decimal pl-6 my-4 space-y-2">{children}</ol>,
+  },
+  marks: {
+    link: ({ children, value }) => {
+      const href = value?.href || "#";
+      const external = /^https?:\/\//i.test(href);
+      return (
+        <a
+          href={href}
+          target={external ? "_blank" : undefined}
+          rel={external ? "noopener noreferrer" : undefined}
+          className="underline"
+        >
+          {children}
+        </a>
+      );
+    },
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+  },
+};
 
 const ptComponentsWithAd = {
   ...ptComponents,
@@ -267,13 +312,7 @@ function NavCard({ label, item }) {
       className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"
     >
       {thumb ? (
-        <Image
-          src={thumb}
-          alt=""
-          width={64}
-          height={64}
-          className="h-16 w-16 rounded object-cover"
-        />
+        <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
       ) : (
         <div className="h-16 w-16 rounded bg-gray-100" />
       )}
@@ -300,9 +339,7 @@ export default function PostPage({ post, nav }) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
-        <p className="opacity-80">
-          The post you’re looking for doesn’t exist or isn’t available yet.
-        </p>
+        <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
         <div className="mt-6">
           <Link className="text-blue-600 underline" href="/">
             Go back home
@@ -342,8 +379,7 @@ export default function PostPage({ post, nav }) {
   const displayTitle = title || "Untitled Post";
   const metaTitle = seoTitle || displayTitle;
   const metaDesc =
-    seoDescription ||
-    (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
+    seoDescription || (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
   const imageUrl = mainImage?.asset?.url || null;
   const imageAlt = mainImage?.alt || displayTitle;
   const caption = mainImage?.caption || mainImage?.alt || null;
@@ -367,15 +403,14 @@ export default function PostPage({ post, nav }) {
 
   const hasTopSafety = Array.isArray(safetyTips) && safetyTips.length > 0;
   const steps = Array.isArray(stepByStepInstructions)
-    ? stepByStepInstructions.filter(
-        (s) => asString(s?.title) || s?.text || s?.image?.asset?.url
-      )
+    ? stepByStepInstructions.filter((s) => asString(s?.title) || s?.text || s?.image?.asset?.url)
     : [];
   const faqWithAnswers =
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
-  // Body cleanup: strip embedded “Recommended Gear / Compare options …”
+  // Body cleanup: strip embedded boilerplate (including Troubleshooting/Fix‑Ups) and
+  // duplicate in‑body affiliate sections.
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
@@ -393,10 +428,7 @@ export default function PostPage({ post, nav }) {
         {(publishedAt || _createdAt) && (
           <meta property="article:published_time" content={publishedAt || _createdAt} />
         )}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
       </Head>
 
       <AdSenseHead />
@@ -407,11 +439,7 @@ export default function PostPage({ post, nav }) {
           {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={LEFT_SLOT}
-                format="auto"
-                style={{ display: "block", width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
             </div>
           </aside>
 
@@ -434,9 +462,7 @@ export default function PostPage({ post, nav }) {
                     className="w-full h-auto rounded-xl"
                     priority
                   />
-                  {caption && (
-                    <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
-                  )}
+                  {caption && <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>}
                 </figure>
               ) : (
                 <div className="mb-4 bg-gray-100 rounded-xl w-full aspect-[1200/630] flex items-center justify-center text-sm opacity-70">
@@ -480,7 +506,7 @@ export default function PostPage({ post, nav }) {
                 <section className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {Array.isArray(toolsNeeded) && toolsNeeded.length > 0 && (
                     <div>
-                      <h2 className="text-xl font-semibold mb-2">Tools Needed</h2>
+                      <h2 className="text-2xl font-semibold mb-2">Tools Needed</h2>
                       <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
                         {toolsNeeded.map((t, i) => (
                           <li key={i}>{asString(t)}</li>
@@ -490,7 +516,7 @@ export default function PostPage({ post, nav }) {
                   )}
                   {Array.isArray(materialsNeeded) && materialsNeeded.length > 0 && (
                     <div>
-                      <h2 className="text-xl font-semibold mb-2">Materials Needed</h2>
+                      <h2 className="text-2xl font-semibold mb-2">Materials Needed</h2>
                       <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
                         {materialsNeeded.map((m, i) => (
                           <li key={i}>{asString(m)}</li>
@@ -500,7 +526,7 @@ export default function PostPage({ post, nav }) {
                   )}
                   {hasTopSafety && (
                     <div>
-                      <h2 className="text-xl font-semibold mb-2">Safety Tips</h2>
+                      <h2 className="text-2xl font-semibold mb-2">Safety Tips</h2>
                       <ul className="list-disc pl-6 space-y-1 text-sm leading-6">
                         {safetyTips.map((s, i) => (
                           <li key={i}>{asString(s)}</li>
@@ -514,10 +540,7 @@ export default function PostPage({ post, nav }) {
               {/* Body with inline ad after the 3rd block */}
               {Array.isArray(cleanBody) ? (
                 <div className="prose lg:prose-lg max-w-none">
-                  <PortableText
-                    value={insertInlineAd(cleanBody, 3)}
-                    components={ptComponentsWithAd}
-                  />
+                  <PortableText value={insertInlineAd(cleanBody, 3)} components={ptComponentsWithAd} />
                 </div>
               ) : typeof cleanBody === "string" && cleanBody.trim().length > 0 ? (
                 <div className="prose lg:prose-lg max-w-none">
@@ -530,16 +553,13 @@ export default function PostPage({ post, nav }) {
               {/* Video */}
               {videoURL ? (
                 <div className="my-8">
-                  {/* basic YT handling, otherwise <video> */}
                   {/youtu\.be|youtube\.com/.test(videoURL) ? (
                     <div className="aspect-video w-full my-8">
                       <iframe
                         className="w-full h-full rounded-xl"
                         src={
                           (videoURL.match(/v=([^&]+)/) || [])[1]
-                            ? `https://www.youtube.com/embed/${
-                                videoURL.match(/v=([^&]+)/)[1]
-                              }`
+                            ? `https://www.youtube.com/embed/${videoURL.match(/v=([^&]+)/)[1]}`
                             : videoURL.replace("watch?v=", "embed/")
                         }
                         title="Video"
@@ -563,14 +583,11 @@ export default function PostPage({ post, nav }) {
                       const stepImage = s?.image?.asset?.url || null;
                       const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
                       const isBlocks = Array.isArray(s?.text);
-                      const hasStringText =
-                        !isBlocks && typeof s?.text === "string" && s.text.trim().length > 0;
+                      const hasStringText = !isBlocks && typeof s?.text === "string" && s.text.trim().length > 0;
 
                       return (
                         <li key={i}>
-                          {stepTitle && (
-                            <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>
-                          )}
+                          {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
 
                           {isBlocks ? (
                             <div className="prose max-w-none mb-3">
@@ -581,13 +598,7 @@ export default function PostPage({ post, nav }) {
                           ) : null}
 
                           {stepImage && (
-                            <Image
-                              src={stepImage}
-                              alt={stepAlt}
-                              width={1200}
-                              height={675}
-                              className="rounded-lg mt-2"
-                            />
+                            <Image src={stepImage} alt={stepAlt} width={1200} height={675} className="rounded-lg mt-2" />
                           )}
                         </li>
                       );
@@ -597,9 +608,7 @@ export default function PostPage({ post, nav }) {
               )}
 
               {/* ======= RECOMMENDED GEAR (bottom) ======= */}
-              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
-                <AffiliateGrid links={affiliateLinks} />
-              )}
+              {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && <AffiliateGrid links={affiliateLinks} />}
 
               {/* Common Mistakes */}
               {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
@@ -635,9 +644,7 @@ export default function PostPage({ post, nav }) {
               {/* Prev / Next */}
               {(nav?.prev || nav?.next) && (
                 <section className="mt-12 border-t pt-8">
-                  <h2 className="text-xl font-semibold mb-4">
-                    More in {category?.title || "DIY HQ"}
-                  </h2>
+                  <h2 className="text-xl font-semibold mb-4">More in {category?.title || "DIY HQ"}</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <NavCard label="Previous" item={nav.prev} />
                     <NavCard label="Next" item={nav.next} />
@@ -651,10 +658,7 @@ export default function PostPage({ post, nav }) {
                   <h2 className="text-2xl font-semibold mb-3">Tags</h2>
                   <div className="flex flex-wrap gap-2">
                     {projectTags.map((t, i) => (
-                      <span
-                        key={i}
-                        className="rounded-full bg-gray-100 px-3 py-1 text-xs"
-                      >
+                      <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
                         {asString(t)}
                       </span>
                     ))}
@@ -681,11 +685,7 @@ export default function PostPage({ post, nav }) {
           {/* RIGHT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={RIGHT_SLOT}
-                format="auto"
-                style={{ display: "block", width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
             </div>
           </aside>
         </div>
@@ -705,11 +705,9 @@ export async function getStaticProps({ params }) {
     if (Array.isArray(post.body)) post.body = sanitizePortableText(post.body);
     if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
     if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
-    ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach(
-      (k) => {
-        if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
-      }
-    );
+    ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach((k) => {
+      if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
+    });
     if (Array.isArray(post.stepByStepInstructions)) {
       post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
         ...s,
@@ -730,7 +728,7 @@ export async function getStaticProps({ params }) {
       );
     }
 
-    // Strip in‑body boilerplate affiliate sections
+    // Strip in‑body boilerplate affiliate sections (and Troubleshooting/Fix‑Ups)
     if (Array.isArray(post.body)) {
       const a = post.affiliateLinks || [];
       post.body = stripBoilerplate(stripRecommended(post.body, a));
