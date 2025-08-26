@@ -9,19 +9,20 @@ import AdSenseHead from "../../components/AdSenseHead.jsx";
 import AdSlot from "../../components/AdSlot.jsx";
 import AffiliateGrid from "../../components/AffiliateGrid.jsx";
 
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// Ad slots (replace with your real slot IDs)
 const LEFT_SLOT  = "XXXXXXXXXX";
 const RIGHT_SLOT = "YYYYYYYYYY";
 const INART_SLOT = "ZZZZZZZZZZ";
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
+// ---------- GROQ ----------
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
   estimatedTime,estimatedCost,readTime,difficultyLevel,authorAIName,commentsEnabled,updateLog,
   featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[],
   commonMistakes[],safetyTips[],"toolsNeeded": toolsNeeded[],"materialsNeeded": materialsNeeded[],
-
   "stepByStepInstructions": stepByStepInstructions[]{...,title,text,image{asset->{url}, alt}},
   mainImage{alt,caption,asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }},
   "category": coalesce(category->{ _id, title, "slug": slug.current },
@@ -52,7 +53,7 @@ const NAV_QUERY = `
 }
 `;
 
-/* ---------------- PortableText components ---------------- */
+// ---------- Portable Text components ----------
 const ptComponents = {
   block: {
     h1: ({ children }) => <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>,
@@ -87,16 +88,18 @@ const ptComponents = {
   },
 };
 
-/* ---------------- Helpers ---------------- */
+// ---------- Helpers ----------
 function sanitizePlainText(text) {
   if (text == null) return text;
   let t = String(text);
+  // kill accidental serialized function ghosts
   t = t.replace(/function\s+anchor\s*\(\)\s*\{?\s*\[native code\]\s*\}?/gi, "");
   t = t.replace(/\bfunction\s+anchor\b/gi, "");
   t = t.replace(/\[ ?native code ?\]/gi, "");
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
+
 function sanitizePortableText(blocks) {
   if (!Array.isArray(blocks)) return blocks;
   return blocks.map((b) => {
@@ -112,49 +115,71 @@ function sanitizePortableText(blocks) {
     return b;
   });
 }
+
 function blockText(b) {
   if (!b) return "";
   if (Array.isArray(b.children)) return b.children.map((c) => c?.text || "").join(" ");
   return "";
 }
 
-/** Remove “Recommended Gear / Compare options / Ready to upgrade …”
- *  regardless of where it appears in the rich body.
+/** Strip “Recommended Gear / Editor’s Picks / Compare options /
+ *  Ready to upgrade / Budget & Time Signals …” sections in the rich body,
+ *  plus any “See our pick… / View on Amazon… / Disclosure …” lines.
+ *  Works whether the heading was added as h2 *or* as a plain paragraph.
  */
 function stripBoilerplate(blocks) {
   if (!Array.isArray(blocks)) return blocks;
-  const killHead = /recommended\s+gear|editor'?s?\s+picks|compare\s+options|ready\s+to\s+upgrade/i;
-  const killLine = /Disclosure:\s*As an Amazon Associate|See our pick/i;
+
+  const killSectionHead = /^(recommended\s*gear|editor'?s?\s*picks?|compare\s*options?|budget\s*&?\s*time\s*signals|ready\s*to\s*upgrade.*setup\??|pro\s*tips?|troubleshooting.*fix-?ups?)/i;
+  const killSingleLine = /(Disclosure:\s*As an Amazon Associate)|(See our pick)|(View on Amazon)/i;
 
   let skipping = false;
   return blocks.filter((b) => {
-    const isHeading = b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
-    const text = blockText(b);
+    const isHeading =
+      b?._type === "block" &&
+      typeof b?.style === "string" &&
+      /^h[1-6]$/i.test(b.style);
 
-    // strip headings that match
-    if (isHeading && killHead.test(text)) { skipping = true; return false; }
+    const txt = blockText(b).trim();
 
-    // stop skipping at next heading
-    if (isHeading && skipping) { skipping = false; }
+    // treat true headings OR paragraph headings alike
+    const looksLikeSectionHead = killSectionHead.test(txt);
+
+    if (isHeading || looksLikeSectionHead) {
+      if (killSectionHead.test(txt)) {
+        skipping = true;
+        return false; // drop the heading itself
+      }
+      // if some other heading and we were skipping, stop skipping
+      if (isHeading && skipping) {
+        skipping = false;
+      }
+    }
 
     if (skipping) return false;
-    if (killLine.test(text)) return false; // strip see‑our‑pick / disclosure lines inside body
+    if (killSingleLine.test(txt)) return false;
 
     return true;
   });
 }
 
-/** Existing helper that hid in‑body “Recommended Gear” when no affiliate links. */
+/** Legacy: if body contained an embedded “Recommended Gear” section and there
+ *  are *no* affiliate links for the post, hide that orphan chunk.
+ */
 function stripRecommended(blocks, affiliateLinks) {
   if (!Array.isArray(blocks)) return blocks;
-  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks; // keep; we’ll strip with stripBoilerplate
+  if (Array.isArray(affiliateLinks) && affiliateLinks.length > 0) return blocks;
+
   let skipping = false;
   return blocks.filter((b) => {
-    const isHeading = b?._type === "block" && typeof b?.style === "string" && /^h[1-6]$/i.test(b.style);
-    const text = blockText(b).toLowerCase();
+    const txt = blockText(b).toLowerCase();
+    const isHeading =
+      b?._type === "block" &&
+      typeof b?.style === "string" &&
+      /^h[1-6]$/i.test(b.style);
 
     if (isHeading) {
-      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
+      if (/recommended\s+gear/.test(txt) || /editor'?s?\s+picks/.test(txt)) {
         skipping = true;
         return false;
       }
@@ -162,10 +187,9 @@ function stripRecommended(blocks, affiliateLinks) {
       return true;
     }
     if (skipping) return false;
-    if (/^see our pick/i.test(text)) return false;
-    if (/view on amazon/i.test(text)) return false;
-    if (/affiliate code/i.test(text)) return false;
-    if (/^disclosure:.*amazon associate/i.test(text)) return false;
+    if (/^see our pick/i.test(txt)) return false;
+    if (/view on amazon/i.test(txt)) return false;
+    if (/^disclosure:.*amazon associate/i.test(txt)) return false;
     return true;
   });
 }
@@ -288,12 +312,12 @@ function NavCard({ label, item }) {
   );
 }
 
-/* ---------- In-article ad injection ---------- */
+// ---------- Inline ad injection ----------
 function insertInlineAd(blocks, index = 3) {
   if (!Array.isArray(blocks)) return blocks;
   const out = [...blocks];
   const i = Math.min(Math.max(index, 1), out.length);
-  out.splice(i, 0, { _type: 'adMarker', _key: `ad-${i}` });
+  out.splice(i, 0, { _type: "adMarker", _key: `ad-${i}` });
   return out;
 }
 
@@ -306,14 +330,14 @@ const ptComponentsWithAd = {
           slot={INART_SLOT}
           layout="in-article"
           format="fluid"
-          style={{ display: 'block', textAlign: 'center' }}
+          style={{ display: "block", textAlign: "center" }}
         />
       </div>
     ),
   },
 };
 
-/* ---------------- Page ---------------- */
+// ====================== PAGE ======================
 export default function PostPage({ post, nav }) {
   if (!post) {
     return (
@@ -367,7 +391,7 @@ export default function PostPage({ post, nav }) {
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
-  // --- body cleanup: strip boilerplate and embedded affiliate sections
+  // Body cleanup: remove embedded affiliate/compare blocks & boilerplate
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
@@ -501,11 +525,11 @@ export default function PostPage({ post, nav }) {
               {maybeEmbed(videoURL)}
 
               {/* Step-by-step */}
-              {steps.length > 0 && (
+              {Array.isArray(stepByStepInstructions) && stepByStepInstructions.length > 0 && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
                   <ol className="list-decimal pl-6 space-y-6">
-                    {steps.map((s, i) => {
+                    {stepByStepInstructions.map((s, i) => {
                       const stepText = asString(s?.text) || asString(s);
                       const stepTitle = s?.title ? String(s.title) : null;
                       const stepImage = s?.image?.asset?.url || null;
@@ -530,7 +554,7 @@ export default function PostPage({ post, nav }) {
                 </section>
               )}
 
-              {/* ======= RECOMMENDED GEAR (bottom) ======= */}
+              {/* ======= RECOMMENDED GEAR (bottom only) ======= */}
               {Array.isArray(affiliateLinks) && affiliateLinks.length > 0 && (
                 <AffiliateGrid links={affiliateLinks} />
               )}
@@ -546,7 +570,7 @@ export default function PostPage({ post, nav }) {
               )}
 
               {/* FAQ */}
-              {showFaq && (
+              {Array.isArray(faqWithAnswers) && faqWithAnswers.length > 0 && (
                 <section className="mt-10">
                   <h2 className="text-2xl font-semibold mb-4">FAQ</h2>
                   <div className="space-y-6">
@@ -615,7 +639,7 @@ export default function PostPage({ post, nav }) {
   );
 }
 
-/* ---------------- Data fetching ---------------- */
+// ====================== DATA ======================
 export async function getStaticProps({ params }) {
   try {
     const { client } = await import("../../lib/sanity.client");
@@ -643,7 +667,7 @@ export async function getStaticProps({ params }) {
       );
     }
 
-    // Hide embedded “Recommended Gear / Compare options” blocks
+    // One more pass to ensure we never show the embedded RG/Compare chunks
     if (Array.isArray(post.body)) {
       const a = post.affiliateLinks || [];
       post.body = stripBoilerplate(stripRecommended(post.body, a));

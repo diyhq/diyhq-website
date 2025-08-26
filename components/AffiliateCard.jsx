@@ -1,105 +1,71 @@
 // components/AffiliateCard.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 export default function AffiliateCard({ url }) {
-  const [data, setData] = useState({
-    loading: true,
-    error: false,
-    title: "",
-    description: "",
-    image: null,
-    url: url || "",
-    host: "",
-  });
+  const [data, setData] = useState({ loading: true });
 
   useEffect(() => {
     let alive = true;
-
-    async function run() {
+    (async () => {
       try {
-        const res = await fetch(`/api/affiliate/preview?url=${encodeURIComponent(url)}`);
-        const json = await res.json();
+        const r = await fetch(`/api/affiliate-preview?url=${encodeURIComponent(url)}`);
+        const json = await r.json();
         if (!alive) return;
-
-        const u = new URL(json?.url || url);
-        setData({
-          loading: false,
-          error: false,
-          title: json?.title || u.hostname.replace(/^www\./, ""),
-          description: json?.description || "",
-          image: json?.image || null,
-          url: json?.url || url,
-          host: u.hostname.replace(/^www\./, ""),
-        });
-      } catch (e) {
+        setData({ loading: false, ...json });
+      } catch {
         if (!alive) return;
-        const u = new URL(url);
-        setData({
-          loading: false,
-          error: true,
-          title: u.hostname.replace(/^www\./, ""),
-          description: "",
-          image: null,
-          url,
-          host: u.hostname.replace(/^www\./, ""),
-        });
+        setData({ loading: false, ok: false });
       }
-    }
-
-    run();
+    })();
     return () => {
       alive = false;
     };
   }, [url]);
 
-  const A = ({ children, className = "" }) => (
-    <a
-      href={data.url || url}
-      target="_blank"
-      rel="nofollow sponsored noopener noreferrer"
-      className={`group block rounded-lg border bg-white hover:shadow-sm transition ${className}`}
-      aria-label="View on Amazon (opens in new tab)"
-    >
-      {children}
-    </a>
-  );
+  const title =
+    data?.title?.replace(/\s+\|\s*Amazon.*$/i, '').trim() ||
+    new URL(url).hostname.replace(/^www\./, '');
 
-  // --- Compact horizontal row (thumbnail left, text right)
-  // Height target: ~96px on md+, ~84px on mobile
   return (
-    <A className="p-3">
-      <div className="flex items-start gap-3 md:gap-4 min-h-[84px] md:min-h-[96px]">
-        <div className="relative w-16 h-16 md:w-20 md:h-20 flex-shrink-0 rounded bg-gray-100 overflow-hidden border">
-          {data.image ? (
-            // Using <img> keeps it simple; Next/Image is allowed too if remotePatterns are set.
-            <img
+    <a
+      href={data?.url || url}
+      target="_blank"
+      rel="nofollow sponsored noopener"
+      className="group block rounded-lg border bg-white shadow-sm hover:shadow-md transition-shadow"
+      aria-label={title || 'View product on Amazon'}
+    >
+      <div className="flex items-stretch">
+        {/* Thumb */}
+        <div className="relative shrink-0 w-28 h-28 sm:w-32 sm:h-32 border-r overflow-hidden bg-gray-50">
+          {data?.image ? (
+            <Image
               src={data.image}
-              alt={data.title || "Amazon product"}
-              className="absolute inset-0 w-full h-full object-contain"
-              loading="lazy"
+              alt={title || 'Product image'}
+              fill
+              sizes="(max-width: 640px) 7rem, 8rem"
+              className="object-contain"
+              priority={false}
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+            <div className="absolute inset-0 grid place-items-center text-xs text-gray-400">
               Preview
             </div>
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-snug text-gray-900 line-clamp-2">
-            {data.title || data.host}
+        {/* Text */}
+        <div className="flex-1 p-3 sm:p-4 min-w-0">
+          <div className="text-sm font-semibold text-gray-900 leading-snug truncate group-hover:text-orange-600">
+            {title || 'View →'}
           </div>
-          {data.description ? (
-            <div className="mt-1 text-xs text-gray-600 leading-snug line-clamp-2">
-              {data.description}
-            </div>
-          ) : null}
-
-          <div className="mt-2 text-xs font-medium text-orange-600">
-            View <span aria-hidden>→</span>
-          </div>
+          {data?.description ? (
+            <p className="mt-1 text-xs text-gray-600 line-clamp-3">{data.description}</p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">View →</p>
+          )}
         </div>
       </div>
-    </A>
+    </a>
   );
 }
