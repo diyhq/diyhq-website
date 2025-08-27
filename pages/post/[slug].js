@@ -207,7 +207,9 @@ function sanitizePortableText(blocks) {
 function blocksToPlainText(blocks) {
   try {
     return (blocks || [])
-      .map((b) => (Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""))
+      .map((b) =>
+        Array.isArray(b.children) ? b.children.map((c) => c.text || "").join(" ") : ""
+      )
       .join("\n")
       .trim();
   } catch {
@@ -277,11 +279,7 @@ function stripRecommended(blocks, affiliateLinks) {
     const text = blockText(b).toLowerCase();
 
     if (isHeading) {
-      if (
-        /recommended\s+gear/.test(text) ||
-        /editor'?s?\s+picks/.test(text) ||
-        /recommended\s+picks/.test(text)
-      ) {
+      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
         skipping = true;
         return false;
       }
@@ -322,15 +320,15 @@ const ptComponentsWithAd = {
   },
 };
 
-/* ---------- New: compact list card ---------- */
+/* ---------- COMPACT Quick Info List Card (smaller, no bullets) ---------- */
 function ListCard({ title, items }) {
   if (!Array.isArray(items) || items.length === 0) return null;
   return (
-    <div className="rounded-lg border p-4 bg-white">
-      <h3 className="text-base font-semibold mb-2">{title}</h3>
-      <ul className="list-disc pl-5 space-y-1">
+    <div className="rounded-lg border p-3 bg-white">
+      <div className="text-[11px] uppercase tracking-wide opacity-60 mb-1">{title}</div>
+      <ul className="list-none pl-0 space-y-1">
         {items.map((t, i) => (
-          <li key={i}>{asString(t)}</li>
+          <li key={i} className="text-[13px] leading-5">{asString(t)}</li>
         ))}
       </ul>
     </div>
@@ -359,8 +357,7 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"
-    >
+      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]">
       {thumb ? (
         <Image
           src={thumb}
@@ -460,7 +457,6 @@ export default function PostPage({ post, nav }) {
     description: metaDesc,
   };
 
-  const hasTopSafety = Array.isArray(safetyTips) && safetyTips.length > 0;
   const steps = Array.isArray(stepByStepInstructions)
     ? stepByStepInstructions.filter(
         (s) => asString(s?.title) || s?.text || s?.image?.asset?.url
@@ -475,7 +471,7 @@ export default function PostPage({ post, nav }) {
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
-  // ---- Quick Info lists (top) ----
+  // ---- Quick Info lists (top; compact, no bullets) ----
   const toolsArr      = Array.isArray(toolsNeeded)     ? toolsNeeded.slice(0, 8)     : [];
   const materialsArr  = Array.isArray(materialsNeeded) ? materialsNeeded.slice(0, 8) : [];
   const safetyBase    = (Array.isArray(safetyTips) && safetyTips.length > 0)
@@ -484,6 +480,9 @@ export default function PostPage({ post, nav }) {
   const safetyArr     = safetyBase.slice(0, 8);
   const safetyTitle   = (Array.isArray(safetyTips) && safetyTips.length > 0) ? "Safety Tips" : "Common Mistakes";
   const showQuickInfo = toolsArr.length > 0 || materialsArr.length > 0 || safetyArr.length > 0;
+
+  // Caption under hero: prefer SEO description
+  const imageCaption = seoDescription || caption || null;
 
   return (
     <>
@@ -540,8 +539,8 @@ export default function PostPage({ post, nav }) {
                     className="w-full h-auto rounded-xl"
                     priority
                   />
-                  {caption && (
-                    <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
+                  {imageCaption && (
+                    <figcaption className="mt-2 text-sm opacity-80">{imageCaption}</figcaption>
                   )}
                 </figure>
               ) : (
@@ -553,15 +552,15 @@ export default function PostPage({ post, nav }) {
               {/* Meta row */}
               <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                  {kv("Author", author?.name || authorAIName)}
-                  {kv("Skill Level", difficultyLevel)}
+                  {kv("Author", post?.author?.name || post?.authorAIName)}
+                  {kv("Skill Level", post?.difficultyLevel)}
                   {kv("Read Time", readMins ? `${readMins} min` : null)}
                   {kv("Estimated Cost", costText)}
                   {kv(
                     "Category",
-                    category?.title && category?.slug ? (
-                      <Link className="underline" href={`/category/${category.slug}`}>
-                        {category.title}
+                    post?.category?.title && post?.category?.slug ? (
+                      <Link className="underline" href={`/category/${post.category.slug}`}>
+                        {post.category.title}
                       </Link>
                     ) : null
                   )}
@@ -585,7 +584,7 @@ export default function PostPage({ post, nav }) {
                 </section>
               ) : null}
 
-              {/* Excerpt */}
+              {/* Excerpt (optional; separate from image caption) */}
               {typeof excerpt === "string" && excerpt.length > 0 && (
                 <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
               )}
@@ -797,18 +796,6 @@ export async function getStaticProps({ params }) {
         // keep s.text as‑is (string or PT array) for the renderer
         text: Array.isArray(s?.text) ? s.text : sanitizePlainText(asString(s?.text)),
       }));
-    }
-
-    if (Array.isArray(post.faq)) {
-      post.faq = post.faq.map((f) =>
-        typeof f === "object"
-          ? {
-              ...f,
-              question: sanitizePlainText(asString(f?.question || f?.q)),
-              answer: sanitizePlainText(asString(f?.answer || f?.a)),
-            }
-          : sanitizePlainText(asString(f))
-      );
     }
 
     // Strip in‑body affiliate boilerplate after upgrading headings
