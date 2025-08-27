@@ -95,7 +95,6 @@ const NAV_QUERY = `
 /* ---------------- PortableText components ---------------- */
 const ptComponents = {
   block: {
-    // Make each heading one size larger than before and cover h1–h6.
     h1: ({ children }) => (
       <h1 className="text-3xl font-bold mt-8 mb-4">{children}</h1>
     ),
@@ -147,6 +146,19 @@ const ptComponents = {
     strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
     em: ({ children }) => <em className="italic">{children}</em>,
   },
+  // inline ad marker
+  types: {
+    adMarker: () => (
+      <div className="my-8">
+        <AdSlot
+          slot={INART_SLOT}
+          layout="in-article"
+          format="fluid"
+          style={{ display: "block", textAlign: "center" }}
+        />
+      </div>
+    ),
+  },
 };
 
 /* ---------------- Helpers ---------------- */
@@ -193,8 +205,6 @@ function sanitizePortableText(blocks) {
           c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
         );
       }
-      // If Sanity delivered a "normal" block that is actually a section
-      // title we've standardized, upgrade it to a heading.
       if (!out.style || out.style === "normal") {
         out = upgradeHeadings(out);
       }
@@ -279,7 +289,11 @@ function stripRecommended(blocks, affiliateLinks) {
     const text = blockText(b).toLowerCase();
 
     if (isHeading) {
-      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
+      if (
+        /recommended\s+gear/.test(text) ||
+        /editor'?s?\s+picks/.test(text) ||
+        /recommended\s+picks/.test(text)
+      ) {
         skipping = true;
         return false;
       }
@@ -304,31 +318,21 @@ function insertInlineAd(blocks, index = 3) {
   return out;
 }
 
-const ptComponentsWithAd = {
-  ...ptComponents,
-  types: {
-    adMarker: () => (
-      <div className="my-8">
-        <AdSlot
-          slot={INART_SLOT}
-          layout="in-article"
-          format="fluid"
-          style={{ display: "block", textAlign: "center" }}
-        />
-      </div>
-    ),
-  },
-};
-
-/* ---------- COMPACT Quick Info List Card (smaller, no bullets) ---------- */
+/* ---------- Compact Quick Info list (tiny custom bullets) ---------- */
 function ListCard({ title, items }) {
   if (!Array.isArray(items) || items.length === 0) return null;
+
   return (
-    <div className="rounded-lg border p-3 bg-white">
-      <div className="text-[11px] uppercase tracking-wide opacity-60 mb-1">{title}</div>
-      <ul className="list-none pl-0 space-y-1">
+    <div className="rounded-lg border p-4 bg-white">
+      <h3 className="text-[12px] font-semibold uppercase tracking-wide mb-2 opacity-70">
+        {title}
+      </h3>
+      <ul className="space-y-1.5 text-[13px] leading-5">
         {items.map((t, i) => (
-          <li key={i} className="text-[13px] leading-5">{asString(t)}</li>
+          <li key={i} className="flex items-start gap-2">
+            <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-gray-400 flex-none" />
+            <span className="flex-1 break-words">{asString(t)}</span>
+          </li>
         ))}
       </ul>
     </div>
@@ -438,7 +442,6 @@ export default function PostPage({ post, nav }) {
     (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
   const imageUrl = mainImage?.asset?.url || null;
   const imageAlt = mainImage?.alt || displayTitle;
-  const caption = mainImage?.caption || mainImage?.alt || null;
 
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
   const readMins = estimateReadMinutes(post);
@@ -471,7 +474,7 @@ export default function PostPage({ post, nav }) {
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
-  // ---- Quick Info lists (top; compact, no bullets) ----
+  // ---- Quick Info lists (top) ----
   const toolsArr      = Array.isArray(toolsNeeded)     ? toolsNeeded.slice(0, 8)     : [];
   const materialsArr  = Array.isArray(materialsNeeded) ? materialsNeeded.slice(0, 8) : [];
   const safetyBase    = (Array.isArray(safetyTips) && safetyTips.length > 0)
@@ -480,9 +483,6 @@ export default function PostPage({ post, nav }) {
   const safetyArr     = safetyBase.slice(0, 8);
   const safetyTitle   = (Array.isArray(safetyTips) && safetyTips.length > 0) ? "Safety Tips" : "Common Mistakes";
   const showQuickInfo = toolsArr.length > 0 || materialsArr.length > 0 || safetyArr.length > 0;
-
-  // Caption under hero: prefer SEO description
-  const imageCaption = seoDescription || caption || null;
 
   return (
     <>
@@ -539,8 +539,8 @@ export default function PostPage({ post, nav }) {
                     className="w-full h-auto rounded-xl"
                     priority
                   />
-                  {imageCaption && (
-                    <figcaption className="mt-2 text-sm opacity-80">{imageCaption}</figcaption>
+                  {metaDesc && (
+                    <figcaption className="mt-2 text-sm opacity-80">{metaDesc}</figcaption>
                   )}
                 </figure>
               ) : (
@@ -552,15 +552,15 @@ export default function PostPage({ post, nav }) {
               {/* Meta row */}
               <section className="mt-3 mb-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                  {kv("Author", post?.author?.name || post?.authorAIName)}
-                  {kv("Skill Level", post?.difficultyLevel)}
+                  {kv("Author", author?.name || authorAIName)}
+                  {kv("Skill Level", difficultyLevel)}
                   {kv("Read Time", readMins ? `${readMins} min` : null)}
                   {kv("Estimated Cost", costText)}
                   {kv(
                     "Category",
-                    post?.category?.title && post?.category?.slug ? (
-                      <Link className="underline" href={`/category/${post.category.slug}`}>
-                        {post.category.title}
+                    category?.title && category?.slug ? (
+                      <Link className="underline" href={`/category/${category.slug}`}>
+                        {category.title}
                       </Link>
                     ) : null
                   )}
@@ -583,11 +583,6 @@ export default function PostPage({ post, nav }) {
                   </div>
                 </section>
               ) : null}
-
-              {/* Excerpt (optional; separate from image caption) */}
-              {typeof excerpt === "string" && excerpt.length > 0 && (
-                <p className="text-lg leading-relaxed mb-6 opacity-90">{excerpt}</p>
-              )}
 
               {/* Body with inline ad after the 3rd block */}
               {Array.isArray(cleanBody) ? (
