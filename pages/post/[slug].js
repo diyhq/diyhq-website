@@ -359,7 +359,7 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"`
+      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"
     >
       {thumb ? (
         <Image
