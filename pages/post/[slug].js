@@ -39,12 +39,29 @@ const MINOR_HEADING_HINTS = [
   "realistic ranges and tradeoffs",
 ];
 
+// *** Shape-resilient GROQ: prefer meta.*, fallback to root ***
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
-  _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,seoTitle,seoDescription,
-  estimatedTime,estimatedCost,readTime,difficultyLevel,authorAIName,commentsEnabled,updateLog,
-  featured,"projectTags": projectTags[],videoURL,"affiliateLinks": affiliateLinks[],"faq": faq[],
-  commonMistakes[],safetyTips[],"toolsNeeded": toolsNeeded[],"materialsNeeded": materialsNeeded[],
+  _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,
+  "seoTitle":        coalesce(meta.seoTitle, seoTitle),
+  "seoDescription":  coalesce(meta.seoDescription, seoDescription),
+
+  "estimatedTime":   coalesce(meta.estimatedTime, estimatedTime),
+  "estimatedCost":   coalesce(meta.estimatedCost, estimatedCost),
+  "readTime":        coalesce(meta.readTime, readTime),
+  "difficultyLevel": coalesce(meta.difficultyLevel, difficultyLevel),
+  authorAIName,commentsEnabled,updateLog,featured,
+  "projectTags": projectTags[],
+  videoURL,
+  "affiliateLinks": coalesce(meta.affiliateLinks, affiliateLinks[]),
+  "faq":            coalesce(meta.faq, faq[]),
+
+  // Quick-info lists — always present if either meta.* or root has values
+  "commonMistakes":  coalesce(meta.commonMistakes,  commonMistakes[]),
+  "safetyTips":      coalesce(meta.safetyTips,      safetyTips[]),
+  "toolsNeeded":     coalesce(meta.toolsNeeded,     toolsNeeded[]),
+  "materialsNeeded": coalesce(meta.materialsNeeded, materialsNeeded[]),
+
   "stepByStepInstructions": stepByStepInstructions[]{...,title,text,image{asset->{url}, alt}},
   mainImage{alt,caption,asset->{ _id, url, metadata{ lqip, dimensions{width,height} } }},
   "category": coalesce(category->{ _id, title, "slug": slug.current },
@@ -305,6 +322,21 @@ const ptComponentsWithAd = {
   },
 };
 
+/* ---------- New: compact list card ---------- */
+function ListCard({ title, items }) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return (
+    <div className="rounded-lg border p-4 bg-white">
+      <h3 className="text-base font-semibold mb-2">{title}</h3>
+      <ul className="list-disc pl-5 space-y-1">
+        {items.map((t, i) => (
+          <li key={i}>{asString(t)}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function estimateReadMinutes(post) {
   if (typeof post?.readTime === "number" && post.readTime > 0) return post.readTime;
   let text = "";
@@ -327,7 +359,7 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"
+      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"`
     >
       {thumb ? (
         <Image
@@ -443,6 +475,16 @@ export default function PostPage({ post, nav }) {
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
+  // ---- Quick Info lists (top) ----
+  const toolsArr      = Array.isArray(toolsNeeded)     ? toolsNeeded.slice(0, 8)     : [];
+  const materialsArr  = Array.isArray(materialsNeeded) ? materialsNeeded.slice(0, 8) : [];
+  const safetyBase    = (Array.isArray(safetyTips) && safetyTips.length > 0)
+    ? safetyTips
+    : (Array.isArray(commonMistakes) ? commonMistakes : []);
+  const safetyArr     = safetyBase.slice(0, 8);
+  const safetyTitle   = (Array.isArray(safetyTips) && safetyTips.length > 0) ? "Safety Tips" : "Common Mistakes";
+  const showQuickInfo = toolsArr.length > 0 || materialsArr.length > 0 || safetyArr.length > 0;
+
   return (
     <>
       <Head>
@@ -531,6 +573,17 @@ export default function PostPage({ post, nav }) {
               <div className="mb-6">
                 <SocialShareBar url={canonicalUrl} title={displayTitle} media={imageUrl || ""} />
               </div>
+
+              {/* Quick Info: Tools / Materials / Safety (or Mistakes) */}
+              {showQuickInfo ? (
+                <section className="mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <ListCard title="Tools Needed" items={toolsArr} />
+                    <ListCard title="Materials Needed" items={materialsArr} />
+                    <ListCard title={safetyTitle} items={safetyArr} />
+                  </div>
+                </section>
+              ) : null}
 
               {/* Excerpt */}
               {typeof excerpt === "string" && excerpt.length > 0 && (
