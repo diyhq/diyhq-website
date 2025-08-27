@@ -15,7 +15,7 @@ const RIGHT_SLOT = "YYYYYYYYYY";
 const INART_SLOT = "ZZZZZZZZZZ";
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-// Known section headings that sometimes arrive as "normal" paragraphs.
+// Known section headings that sometimes arrive as normal paragraphs.
 // We'll upgrade them to headings so they look correct on the page.
 const MAJOR_HEADING_HINTS = [
   "before you start",
@@ -39,7 +39,7 @@ const MINOR_HEADING_HINTS = [
   "realistic ranges and tradeoffs",
 ];
 
-// *** Shape-resilient GROQ: prefer meta.*, fallback to root ***
+// --- Shape-resilient GROQ: prefer meta.*, fallback to root ---
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,
@@ -92,63 +92,6 @@ const NAV_QUERY = `
 }
 `;
 
-/* ---------------- PortableText components ---------------- */
-const ptComponents = {
-  block: {
-    // Make each heading one size larger than before and cover h1–h6.
-    h1: ({ children }) => (
-      <h1 className="text-3xl font-bold mt-8 mb-4">{children}</h1>
-    ),
-    h2: ({ children }) => (
-      <h2 className="text-2xl font-bold mt-8 mb-4">{children}</h2>
-    ),
-    h3: ({ children }) => (
-      <h3 className="text-xl font-semibold mt-6 mb-3">{children}</h3>
-    ),
-    h4: ({ children }) => (
-      <h4 className="text-lg font-semibold mt-5 mb-2">{children}</h4>
-    ),
-    h5: ({ children }) => (
-      <h5 className="text-base font-semibold mt-4 mb-2">{children}</h5>
-    ),
-    h6: ({ children }) => (
-      <h6 className="text-sm font-semibold uppercase tracking-wide mt-3 mb-2">
-        {children}
-      </h6>
-    ),
-    normal: ({ children }) => <p className="my-4 leading-7">{children}</p>,
-    blockquote: ({ children }) => (
-      <blockquote className="border-l-4 pl-4 italic my-4">{children}</blockquote>
-    ),
-  },
-  list: {
-    bullet: ({ children }) => (
-      <ul className="list-disc pl-6 my-4 space-y-2">{children}</ul>
-    ),
-    number: ({ children }) => (
-      <ol className="list-decimal pl-6 my-4 space-y-2">{children}</ol>
-    ),
-  },
-  marks: {
-    link: ({ children, value }) => {
-      const href = value?.href || "#";
-      const external = /^https?:\/\//i.test(href);
-      return (
-        <a
-          href={href}
-          target={external ? "_blank" : undefined}
-          rel={external ? "noopener noreferrer" : undefined}
-          className="underline"
-        >
-          {children}
-        </a>
-      );
-    },
-    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-    em: ({ children }) => <em className="italic">{children}</em>,
-  },
-};
-
 /* ---------------- Helpers ---------------- */
 function sanitizePlainText(text) {
   if (text == null) return text;
@@ -166,20 +109,15 @@ function blockText(b) {
   return "";
 }
 
-// Upgrades "normal" blocks whose text matches known section titles
-// into proper heading styles so they look like headings on the page.
+// Upgrades "normal" blocks whose text matches known section titles into proper headings.
 function upgradeHeadings(block) {
   if (!block || block._type !== "block") return block;
   const text = blockText(block).trim();
   if (!text) return block;
 
   const key = text.replace(/:$/, "").toLowerCase();
-  if (MAJOR_HEADING_HINTS.includes(key)) {
-    return { ...block, style: "h2" };
-  }
-  if (MINOR_HEADING_HINTS.includes(key)) {
-    return { ...block, style: "h3" };
-  }
+  if (MAJOR_HEADING_HINTS.includes(key)) return { ...block, style: "h2" };
+  if (MINOR_HEADING_HINTS.includes(key)) return { ...block, style: "h3" };
   return block;
 }
 
@@ -193,11 +131,7 @@ function sanitizePortableText(blocks) {
           c && typeof c === "object" ? { ...c, text: sanitizePlainText(c.text) } : c
         );
       }
-      // If Sanity delivered a "normal" block that is actually a section
-      // title we've standardized, upgrade it to a heading.
-      if (!out.style || out.style === "normal") {
-        out = upgradeHeadings(out);
-      }
+      if (!out.style || out.style === "normal") out = upgradeHeadings(out);
       return out;
     }
     return b;
@@ -234,17 +168,14 @@ function toCurrency(val) {
 function asString(item) {
   if (!item) return null;
   if (typeof item === "string") return item;
-  if (typeof item === "object") {
-    return item.name || item.text || item.title || JSON.stringify(item);
-  }
+  if (typeof item === "object") return item.name || item.text || item.title || JSON.stringify(item);
   return String(item);
 }
 
 /** Remove “Recommended Gear / Compare options / Ready to upgrade …” from the rich body. */
 function stripBoilerplate(blocks) {
   if (!Array.isArray(blocks)) return blocks;
-  const killHead =
-    /recommended\s+gear|editor'?s?\s+picks|compare\s+options|ready\s+to\s+upgrade/i;
+  const killHead = /recommended\s+gear|editor'?s?\s+picks|compare\s+options|ready\s+to\s+upgrade/i;
   const killLine = /Disclosure:\s*As an Amazon Associate|See our pick/i;
 
   let skipping = false;
@@ -257,9 +188,7 @@ function stripBoilerplate(blocks) {
       skipping = true;
       return false;
     }
-    if (isHeading && skipping) {
-      skipping = false;
-    }
+    if (isHeading && skipping) skipping = false;
     if (skipping) return false;
     if (killLine.test(text)) return false;
 
@@ -277,11 +206,7 @@ function stripRecommended(blocks, affiliateLinks) {
     const text = blockText(b).toLowerCase();
 
     if (isHeading) {
-      if (
-        /recommended\s+gear/.test(text) ||
-        /editor'?s?\s+picks/.test(text) ||
-        /recommended\s+picks/.test(text)
-      ) {
+      if (/recommended\s+gear/.test(text) || /editor'?s?\s+picks/.test(text) || /recommended\s+picks/.test(text)) {
         skipping = true;
         return false;
       }
@@ -306,35 +231,76 @@ function insertInlineAd(blocks, index = 3) {
   return out;
 }
 
-const ptComponentsWithAd = {
-  ...ptComponents,
-  types: {
-    adMarker: () => (
-      <div className="my-8">
-        <AdSlot
-          slot={INART_SLOT}
-          layout="in-article"
-          format="fluid"
-          style={{ display: "block", textAlign: "center" }}
-        />
-      </div>
+const ptComponents = {
+  block: {
+    h1: ({ children }) => <h1 className="text-3xl font-bold mt-8 mb-4">{children}</h1>,
+    h2: ({ children }) => {
+      const id = slugify(Array.isArray(children) ? children.join(" ") : String(children));
+      return (
+        <h2 id={id} className="text-2xl font-bold mt-8 mb-4 scroll-mt-24">
+          {children}
+        </h2>
+      );
+    },
+    h3: ({ children }) => {
+      const id = slugify(Array.isArray(children) ? children.join(" ") : String(children));
+      return (
+        <h3 id={id} className="text-xl font-semibold mt-6 mb-3 scroll-mt-24">
+          {children}
+        </h3>
+      );
+    },
+    h4: ({ children }) => <h4 className="text-lg font-semibold mt-5 mb-2">{children}</h4>,
+    h5: ({ children }) => <h5 className="text-base font-semibold mt-4 mb-2">{children}</h5>,
+    h6: ({ children }) => (
+      <h6 className="text-sm font-semibold uppercase tracking-wide mt-3 mb-2">{children}</h6>
+    ),
+    normal: ({ children }) => <p className="my-4 leading-7">{children}</p>,
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-4 pl-4 italic my-4">{children}</blockquote>
     ),
   },
+  list: {
+    bullet: ({ children }) => <ul className="list-disc pl-6 my-4 space-y-2">{children}</ul>,
+    number: ({ children }) => <ol className="list-decimal pl-6 my-4 space-y-2">{children}</ol>,
+  },
+  marks: {
+    link: ({ children, value }) => {
+      const href = value?.href || "#";
+      const external = /^https?:\/\//i.test(href);
+      return (
+        <a
+          href={href}
+          target={external ? "_blank" : undefined}
+          rel={external ? "noopener noreferrer" : undefined}
+          className="underline"
+        >
+          {children}
+        </a>
+      );
+    },
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+  },
+  // You can add types.adMarker renderer if you want to visualize the inline ad position
 };
 
-/* ---------- New: compact list card ---------- */
-function ListCard({ title, items }) {
-  if (!Array.isArray(items) || items.length === 0) return null;
-  return (
-    <div className="rounded-lg border p-4 bg-white">
-      <h3 className="text-base font-semibold mb-2">{title}</h3>
-      <ul className="list-disc pl-5 space-y-1">
-        {items.map((t, i) => (
-          <li key={i}>{asString(t)}</li>
-        ))}
-      </ul>
-    </div>
-  );
+function slugify(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function extractToc(blocks) {
+  const out = [];
+  for (const b of blocks || []) {
+    if (b?._type === "block" && (b.style === "h2" || b.style === "h3")) {
+      const txt = blockText(b).trim();
+      if (txt) out.push({ id: slugify(txt), text: txt, level: b.style });
+    }
+  }
+  return out;
 }
 
 function estimateReadMinutes(post) {
@@ -359,16 +325,9 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"
-    >
+      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]">
       {thumb ? (
-        <Image
-          src={thumb}
-          alt=""
-          width={64}
-          height={64}
-          className="h-16 w-16 rounded object-cover"
-        />
+        <Image src={thumb} alt="" width={64} height={64} className="h-16 w-16 rounded object-cover" />
       ) : (
         <div className="h-16 w-16 rounded bg-gray-100" />
       )}
@@ -389,19 +348,37 @@ function NavCard({ label, item }) {
   );
 }
 
+/* ---------- New: compact chip-style lists for Quick Info ---------- */
+function CompactList({ title, items }) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return (
+    <div className="rounded-lg border p-3 bg-white">
+      <div className="text-[11px] font-semibold uppercase tracking-wide opacity-70 mb-2">
+        {title}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.slice(0, 12).map((t, i) => (
+          <span
+            key={i}
+            className="text-[11px] leading-5 px-2 py-0.5 rounded-full bg-gray-100"
+          >
+            {asString(t)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Page ---------------- */
 export default function PostPage({ post, nav }) {
   if (!post) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-16">
         <h1 className="text-2xl font-semibold mb-2">Post not found</h1>
-        <p className="opacity-80">
-          The post you’re looking for doesn’t exist or isn’t available yet.
-        </p>
+        <p className="opacity-80">The post you’re looking for doesn’t exist or isn’t available yet.</p>
         <div className="mt-6">
-          <Link className="text-blue-600 underline" href="/">
-            Go back home
-          </Link>
+          <Link className="text-blue-600 underline" href="/">Go back home</Link>
         </div>
       </main>
     );
@@ -441,7 +418,9 @@ export default function PostPage({ post, nav }) {
     (typeof excerpt === "string" && excerpt.length ? excerpt : "DIY HQ article.");
   const imageUrl = mainImage?.asset?.url || null;
   const imageAlt = mainImage?.alt || displayTitle;
-  const caption = mainImage?.caption || mainImage?.alt || null;
+
+  // Use SEO Description under the hero image (per request)
+  const heroCaption = seoDescription || null;
 
   const dateText = publishedAt ? new Date(publishedAt).toLocaleDateString() : null;
   const readMins = estimateReadMinutes(post);
@@ -460,30 +439,30 @@ export default function PostPage({ post, nav }) {
     description: metaDesc,
   };
 
-  const hasTopSafety = Array.isArray(safetyTips) && safetyTips.length > 0;
-  const steps = Array.isArray(stepByStepInstructions)
-    ? stepByStepInstructions.filter(
-        (s) => asString(s?.title) || s?.text || s?.image?.asset?.url
-      )
-    : [];
+  const steps =
+    Array.isArray(stepByStepInstructions)
+      ? stepByStepInstructions.filter((s) => asString(s?.title) || s?.text || s?.image?.asset?.url)
+      : [];
+
   const faqWithAnswers =
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
-  // Clean body: remove in‑text affiliate boilerplate & then auto‑upgrade any “normal” blocks
-  // that are really headings (so they render as headings).
+  // Clean body: remove in‑text affiliate boilerplate & then auto‑upgrade any “normal” headings.
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
-  // ---- Quick Info lists (top) ----
-  const toolsArr      = Array.isArray(toolsNeeded)     ? toolsNeeded.slice(0, 8)     : [];
-  const materialsArr  = Array.isArray(materialsNeeded) ? materialsNeeded.slice(0, 8) : [];
-  const safetyBase    = (Array.isArray(safetyTips) && safetyTips.length > 0)
-    ? safetyTips
-    : (Array.isArray(commonMistakes) ? commonMistakes : []);
-  const safetyArr     = safetyBase.slice(0, 8);
-  const safetyTitle   = (Array.isArray(safetyTips) && safetyTips.length > 0) ? "Safety Tips" : "Common Mistakes";
+  // Quick Info arrays
+  const toolsArr = Array.isArray(toolsNeeded) ? toolsNeeded.slice(0, 8) : [];
+  const materialsArr = Array.isArray(materialsNeeded) ? materialsNeeded.slice(0, 8) : [];
+  const safetyBase =
+    Array.isArray(safetyTips) && safetyTips.length > 0 ? safetyTips : Array.isArray(commonMistakes) ? commonMistakes : [];
+  const safetyArr = safetyBase.slice(0, 8);
+  const safetyTitle = Array.isArray(safetyTips) && safetyTips.length > 0 ? "Safety Tips" : "Common Mistakes";
   const showQuickInfo = toolsArr.length > 0 || materialsArr.length > 0 || safetyArr.length > 0;
+
+  // Optional TOC (auto appears if headings exist)
+  const toc = Array.isArray(cleanBody) ? extractToc(cleanBody) : [];
 
   return (
     <>
@@ -499,10 +478,23 @@ export default function PostPage({ post, nav }) {
         {(publishedAt || _createdAt) && (
           <meta property="article:published_time" content={publishedAt || _createdAt} />
         )}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
+        {showFaq && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "FAQPage",
+                mainEntity: faqWithAnswers.map((f) => ({
+                  "@type": "Question",
+                  name: f.question || f.q || "",
+                  acceptedAnswer: { "@type": "Answer", text: f.answer || f.a || "" },
+                })),
+              }),
+            }}
+          />
+        )}
       </Head>
 
       <AdSenseHead />
@@ -513,11 +505,7 @@ export default function PostPage({ post, nav }) {
           {/* LEFT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={LEFT_SLOT}
-                format="auto"
-                style={{ display: "block", width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={LEFT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
             </div>
           </aside>
 
@@ -537,11 +525,12 @@ export default function PostPage({ post, nav }) {
                     alt={imageAlt}
                     width={1200}
                     height={630}
+                    sizes="(min-width: 1280px) 900px, 100vw"
                     className="w-full h-auto rounded-xl"
                     priority
                   />
-                  {caption && (
-                    <figcaption className="mt-2 text-sm opacity-70">{caption}</figcaption>
+                  {heroCaption && (
+                    <figcaption className="mt-2 text-sm opacity-75">{heroCaption}</figcaption>
                   )}
                 </figure>
               ) : (
@@ -578,12 +567,34 @@ export default function PostPage({ post, nav }) {
               {showQuickInfo ? (
                 <section className="mb-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <ListCard title="Tools Needed" items={toolsArr} />
-                    <ListCard title="Materials Needed" items={materialsArr} />
-                    <ListCard title={safetyTitle} items={safetyArr} />
+                    <CompactList title="Tools Needed" items={toolsArr} />
+                    <CompactList title="Materials Needed" items={materialsArr} />
+                    <CompactList title={safetyTitle} items={safetyArr} />
                   </div>
                 </section>
               ) : null}
+
+              {/* Optional TOC (shows only if headings exist) */}
+              {Array.isArray(toc) && toc.length > 0 && (
+                <aside className="hidden lg:block float-right lg:ml-6 lg:w-64 lg:sticky lg:top-24 lg:max-h-[70vh] lg:overflow-auto mb-6">
+                  <div className="rounded-lg border p-3 bg-white">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide opacity-70 mb-2">
+                      On this page
+                    </div>
+                    <nav className="text-sm space-y-1">
+                      {toc.map((h, i) => (
+                        <a
+                          key={i}
+                          href={`#${h.id}`}
+                          className={`block hover:underline ${h.level === "h3" ? "pl-3 opacity-80" : ""}`}
+                        >
+                          {h.text}
+                        </a>
+                      ))}
+                    </nav>
+                  </div>
+                </aside>
+              )}
 
               {/* Excerpt */}
               {typeof excerpt === "string" && excerpt.length > 0 && (
@@ -639,14 +650,11 @@ export default function PostPage({ post, nav }) {
                       const stepImage = s?.image?.asset?.url || null;
                       const stepAlt = s?.image?.alt || stepTitle || `Step ${i + 1}`;
                       const isBlocks = Array.isArray(s?.text);
-                      const hasStringText =
-                        !isBlocks && typeof s?.text === "string" && s.text.trim().length > 0;
+                      const hasStringText = !isBlocks && typeof s?.text === "string" && s.text.trim().length > 0;
 
                       return (
                         <li key={i}>
-                          {stepTitle && (
-                            <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>
-                          )}
+                          {stepTitle && <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>}
 
                           {isBlocks ? (
                             <div className="prose max-w-none mb-3">
@@ -727,10 +735,7 @@ export default function PostPage({ post, nav }) {
                   <h2 className="text-2xl font-semibold mb-3">Tags</h2>
                   <div className="flex flex-wrap gap-2">
                     {projectTags.map((t, i) => (
-                      <span
-                        key={i}
-                        className="rounded-full bg-gray-100 px-3 py-1 text-xs"
-                      >
+                      <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
                         {asString(t)}
                       </span>
                     ))}
@@ -757,11 +762,7 @@ export default function PostPage({ post, nav }) {
           {/* RIGHT SIDEBAR */}
           <aside className="hidden xl:block">
             <div className="sticky top-24">
-              <AdSlot
-                slot={RIGHT_SLOT}
-                format="auto"
-                style={{ display: "block", width: 250, minHeight: 250 }}
-              />
+              <AdSlot slot={RIGHT_SLOT} format="auto" style={{ display: "block", width: 250, minHeight: 250 }} />
             </div>
           </aside>
         </div>
@@ -784,11 +785,9 @@ export async function getStaticProps({ params }) {
     if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
     if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
 
-    ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach(
-      (k) => {
-        if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
-      }
-    );
+    ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach((k) => {
+      if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
+    });
 
     if (Array.isArray(post.stepByStepInstructions)) {
       post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
