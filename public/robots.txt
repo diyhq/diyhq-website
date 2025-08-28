@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://doityourselfhq.com/sitemap.xml
+Sitemap: https://www.doityourselfhq.com/sitemap.xml
