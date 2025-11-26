@@ -319,7 +319,7 @@ function insertInlineAd(blocks, index = 3) {
 }
 
 /* ---------- Compact Quick Info list (tiny custom bullets) ---------- */
-function ListCard({ title, items }) {
+function ListCard({ title, items, affiliateLinkMap }) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
   return (
@@ -328,12 +328,32 @@ function ListCard({ title, items }) {
         {title}
       </h3>
       <ul className="space-y-1.5 text-[13px] leading-5">
-        {items.map((t, i) => (
-          <li key={i} className="flex items-start gap-2">
-            <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-gray-400 flex-none" />
-            <span className="flex-1 break-words">{asString(t)}</span>
-          </li>
-        ))}
+        {items.map((t, i) => {
+          const rawLabel = asString(t);
+          const label = sanitizePlainText(rawLabel || "");
+          const key = label.toLowerCase();
+          const url = affiliateLinkMap?.get(key);
+
+          return (
+            <li key={i} className="flex items-start gap-2">
+              <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-gray-400 flex-none" />
+              <span className="flex-1 break-words">
+                {url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    {label}
+                  </a>
+                ) : (
+                  label
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -436,6 +456,27 @@ export default function PostPage({ post, nav }) {
 
   const slug = post.slug;
   const displayTitle = title || "Untitled Post";
+
+  // Build a map from keyword -> URL (lowercased)
+  const affiliateLinkMap = new Map(
+    (affiliateLinks || [])
+      .map((item) => {
+        if (!item) return null;
+
+        // handle both object form and any legacy string form
+        const keyword =
+          typeof item === "string"
+            ? item
+            : item.keyword || item.label || item.name || "";
+        const url = typeof item === "string" ? null : item.url;
+
+        if (!keyword || !url) return null;
+        const key = sanitizePlainText(keyword).toLowerCase();
+        return [key, url];
+      })
+      .filter(Boolean)
+  );
+
   const metaTitle = seoTitle || displayTitle;
   const metaDesc =
     seoDescription ||
@@ -469,8 +510,8 @@ export default function PostPage({ post, nav }) {
     Array.isArray(faq) && faq.filter((f) => typeof f === "object" && (f?.answer || f?.a));
   const showFaq = faqWithAnswers && faqWithAnswers.length > 0;
 
-  // Clean body: remove in‑text affiliate boilerplate & then auto‑upgrade any “normal” blocks
-  // that are really headings (so they render as headings).
+  // Clean body: remove in-text affiliate boilerplate & then auto-upgrade any “normal” blocks
+  // that are really headings (so they render as headings on the page).
   let cleanBody = Array.isArray(body) ? stripRecommended(body, affiliateLinks) : body;
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
@@ -577,9 +618,21 @@ export default function PostPage({ post, nav }) {
               {showQuickInfo ? (
                 <section className="mb-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <ListCard title="Tools Needed" items={toolsArr} />
-                    <ListCard title="Materials Needed" items={materialsArr} />
-                    <ListCard title={safetyTitle} items={safetyArr} />
+                    <ListCard
+                      title="Tools Needed"
+                      items={toolsArr}
+                      affiliateLinkMap={affiliateLinkMap}
+                    />
+                    <ListCard
+                      title="Materials Needed"
+                      items={materialsArr}
+                      affiliateLinkMap={affiliateLinkMap}
+                    />
+                    <ListCard
+                      title={safetyTitle}
+                      items={safetyArr}
+                      affiliateLinkMap={affiliateLinkMap}
+                    />
                   </div>
                 </section>
               ) : null}
@@ -626,7 +679,7 @@ export default function PostPage({ post, nav }) {
               {/* Step-by-step (PortableText aware) */}
               {steps.length > 0 && (
                 <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-4">Step‑by‑Step Instructions</h2>
+                  <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
                   <ol className="list-decimal pl-6 space-y-6">
                     {steps.map((s, i) => {
                       const stepTitle = s?.title ? String(s.title) : null;
@@ -773,7 +826,7 @@ export async function getStaticProps({ params }) {
 
     const post = { ...raw };
 
-    // Sanitize & gently normalize blocks, and auto‑upgrade known headings
+    // Sanitize & gently normalize blocks, and auto-upgrade known headings
     if (Array.isArray(post.body)) post.body = sanitizePortableText(post.body);
     if (typeof post.body === "string") post.body = sanitizePlainText(post.body);
     if (typeof post.excerpt === "string") post.excerpt = sanitizePlainText(post.excerpt);
@@ -788,12 +841,12 @@ export async function getStaticProps({ params }) {
       post.stepByStepInstructions = post.stepByStepInstructions.map((s) => ({
         ...s,
         title: sanitizePlainText(asString(s?.title)),
-        // keep s.text as‑is (string or PT array) for the renderer
+        // keep s.text as-is (string or PT array) for the renderer
         text: Array.isArray(s?.text) ? s.text : sanitizePlainText(asString(s?.text)),
       }));
     }
 
-    // Strip in‑body affiliate boilerplate after upgrading headings
+    // Strip in-body affiliate boilerplate after upgrading headings
     if (Array.isArray(post.body)) {
       const a = post.affiliateLinks || [];
       post.body = stripBoilerplate(stripRecommended(post.body, a));
