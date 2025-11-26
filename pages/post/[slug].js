@@ -39,7 +39,7 @@ const MINOR_HEADING_HINTS = [
   "realistic ranges and tradeoffs",
 ];
 
-// *** Shape-resilient GROQ: prefer meta.*, fallback to root ***
+// *** Shape-resilient GROQ: prefer root affiliateLinks[], fallback to meta ***
 const POST_QUERY = `
 *[_type == "post" && slug.current == $slug][0]{
   _id,_createdAt,title,"slug": slug.current,publishedAt,excerpt,
@@ -53,7 +53,7 @@ const POST_QUERY = `
   authorAIName,commentsEnabled,updateLog,featured,
   "projectTags": projectTags[],
   videoURL,
-  "affiliateLinks": coalesce(meta.affiliateLinks, affiliateLinks[]),
+  "affiliateLinks": coalesce(affiliateLinks[], meta.affiliateLinks),
   "faq":            coalesce(meta.faq, faq[]),
 
   // Quick-info lists — always present if either meta.* or root has values
@@ -457,7 +457,7 @@ export default function PostPage({ post, nav }) {
   const slug = post.slug;
   const displayTitle = title || "Untitled Post";
 
-  // Build a map from keyword -> URL (lowercased)
+  // Build a map from keyword -> URL (lowercased) for top lists
   const affiliateLinkMap = new Map(
     (affiliateLinks || [])
       .map((item) => {
