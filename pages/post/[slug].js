@@ -52,6 +52,7 @@ const POST_QUERY = `
   "difficultyLevel": coalesce(meta.difficultyLevel, difficultyLevel),
   authorAIName,commentsEnabled,updateLog,featured,
   "projectTags": projectTags[],
+
   videoURL,
   "affiliateLinks": coalesce(affiliateLinks[], meta.affiliateLinks),
   "faq":            coalesce(meta.faq, faq[]),
@@ -381,7 +382,8 @@ function NavCard({ label, item }) {
   return (
     <Link
       href={`/post/${item.slug}`}
-      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]">
+      className="group grid grid-cols-[64px,1fr] gap-2 items-center rounded-lg border p-2 hover:bg-gray-50 transition min-h-[68px]"
+    >
       {thumb ? (
         <Image
           src={thumb}
@@ -488,7 +490,8 @@ export default function PostPage({ post, nav }) {
   const readMins = estimateReadMinutes(post);
   const costText = toCurrency(estimatedCost);
 
-  const canonicalUrl = `https://www.doityourselfhq.com/post/${slug}`;
+  // NOTE: canonical switched to non-www
+  const canonicalUrl = `https://doityourselfhq.com/post/${slug}`;
   const articleLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -516,28 +519,58 @@ export default function PostPage({ post, nav }) {
   cleanBody = Array.isArray(cleanBody) ? stripBoilerplate(cleanBody) : cleanBody;
 
   // ---- Quick Info lists (top) ----
-  const toolsArr      = Array.isArray(toolsNeeded)     ? toolsNeeded.slice(0, 8)     : [];
-  const materialsArr  = Array.isArray(materialsNeeded) ? materialsNeeded.slice(0, 8) : [];
-  const safetyBase    = (Array.isArray(safetyTips) && safetyTips.length > 0)
-    ? safetyTips
-    : (Array.isArray(commonMistakes) ? commonMistakes : []);
-  const safetyArr     = safetyBase.slice(0, 8);
-  const safetyTitle   = (Array.isArray(safetyTips) && safetyTips.length > 0) ? "Safety Tips" : "Common Mistakes";
-  const showQuickInfo = toolsArr.length > 0 || materialsArr.length > 0 || safetyArr.length > 0;
+  const toolsArr = Array.isArray(toolsNeeded) ? toolsNeeded.slice(0, 8) : [];
+  const materialsArr = Array.isArray(materialsNeeded) ? materialsNeeded.slice(0, 8) : [];
+  const safetyBase =
+    Array.isArray(safetyTips) && safetyTips.length > 0
+      ? safetyTips
+      : Array.isArray(commonMistakes)
+      ? commonMistakes
+      : [];
+  const safetyArr = safetyBase.slice(0, 8);
+  const safetyTitle =
+    Array.isArray(safetyTips) && safetyTips.length > 0 ? "Safety Tips" : "Common Mistakes";
+  const showQuickInfo =
+    toolsArr.length > 0 || materialsArr.length > 0 || safetyArr.length > 0;
 
   return (
     <>
       <Head>
         <title>{metaTitle} | DIY HQ</title>
+
+        {/* Basic SEO */}
         {metaDesc && <meta name="description" content={metaDesc} />}
-        {imageUrl && <meta property="og:image" content={imageUrl} />}
+
+        {/* Open Graph / Facebook */}
+        <meta property="og:type" content="article" />
         <meta property="og:title" content={metaTitle} />
         {metaDesc && <meta property="og:description" content={metaDesc} />}
-        <meta property="og:type" content="article" />
         <meta property="og:url" content={canonicalUrl} />
+        <meta property="og:site_name" content="Do It Yourself HQ" />
+
+        {imageUrl && (
+          <>
+            <meta property="og:image" content={imageUrl} />
+            <meta property="og:image:secure_url" content={imageUrl} />
+            <meta property="og:image:alt" content={imageAlt} />
+            <meta property="og:image:width" content="1200" />
+            <meta property="og:image:height" content="630" />
+          </>
+        )}
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={metaTitle} />
+        {metaDesc && <meta name="twitter:description" content={metaDesc} />}
+        {imageUrl && <meta name="twitter:image" content={imageUrl} />}
+
+        {/* Canonical + schema.org */}
         <link rel="canonical" href={canonicalUrl} />
         {(publishedAt || _createdAt) && (
-          <meta property="article:published_time" content={publishedAt || _createdAt} />
+          <meta
+            property="article:published_time"
+            content={publishedAt || _createdAt}
+          />
         )}
         <script
           type="application/ld+json"
@@ -581,7 +614,9 @@ export default function PostPage({ post, nav }) {
                     priority
                   />
                   {metaDesc && (
-                    <figcaption className="mt-2 text-sm opacity-80">{metaDesc}</figcaption>
+                    <figcaption className="mt-2 text-sm opacity-80">
+                      {metaDesc}
+                    </figcaption>
                   )}
                 </figure>
               ) : (
@@ -611,7 +646,11 @@ export default function PostPage({ post, nav }) {
 
               {/* Share bar */}
               <div className="mb-6">
-                <SocialShareBar url={canonicalUrl} title={displayTitle} media={imageUrl || ""} />
+                <SocialShareBar
+                  url={canonicalUrl}
+                  title={displayTitle}
+                  media={imageUrl || ""}
+                />
               </div>
 
               {/* Quick Info: Tools / Materials / Safety (or Mistakes) */}
@@ -650,7 +689,9 @@ export default function PostPage({ post, nav }) {
                   <p>{cleanBody}</p>
                 </div>
               ) : (
-                <p className="opacity-70">This article hasn’t been populated with content yet.</p>
+                <p className="opacity-70">
+                  This article hasn’t been populated with content yet.
+                </p>
               )}
 
               {/* Video */}
@@ -662,7 +703,9 @@ export default function PostPage({ post, nav }) {
                         className="w-full h-full rounded-xl"
                         src={
                           (videoURL.match(/v=([^&]+)/) || [])[1]
-                            ? `https://www.youtube.com/embed/${videoURL.match(/v=([^&]+)/)[1]}`
+                            ? `https://www.youtube.com/embed/${
+                                videoURL.match(/v=([^&]+)/)[1]
+                              }`
                             : videoURL.replace("watch?v=", "embed/")
                         }
                         title="Video"
@@ -679,7 +722,9 @@ export default function PostPage({ post, nav }) {
               {/* Step-by-step (PortableText aware) */}
               {steps.length > 0 && (
                 <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-4">Step-by-Step Instructions</h2>
+                  <h2 className="text-2xl font-semibold mb-4">
+                    Step-by-Step Instructions
+                  </h2>
                   <ol className="list-decimal pl-6 space-y-6">
                     {steps.map((s, i) => {
                       const stepTitle = s?.title ? String(s.title) : null;
@@ -692,7 +737,9 @@ export default function PostPage({ post, nav }) {
                       return (
                         <li key={i}>
                           {stepTitle && (
-                            <h3 className="text-lg font-semibold mb-1">{stepTitle}</h3>
+                            <h3 className="text-lg font-semibold mb-1">
+                              {stepTitle}
+                            </h3>
                           )}
 
                           {isBlocks ? (
@@ -727,7 +774,9 @@ export default function PostPage({ post, nav }) {
               {/* Common Mistakes */}
               {Array.isArray(commonMistakes) && commonMistakes.length > 0 && (
                 <section className="mt-10">
-                  <h2 className="text-2xl font-semibold mb-3">Common Mistakes</h2>
+                  <h2 className="text-2xl font-semibold mb-3">
+                    Common Mistakes
+                  </h2>
                   <ul className="list-disc pl-6 space-y-2">
                     {commonMistakes.map((c, i) => (
                       <li key={i}>{asString(c)}</li>
@@ -788,7 +837,10 @@ export default function PostPage({ post, nav }) {
               {/* Footer nav */}
               <footer className="mt-12 flex items-center justify-between">
                 {category?.slug ? (
-                  <Link className="text-blue-600 underline" href={`/category/${category.slug}`}>
+                  <Link
+                    className="text-blue-600 underline"
+                    href={`/category/${category.slug}`}
+                  >
                     ← Back to {category.title}
                   </Link>
                 ) : (
@@ -833,7 +885,8 @@ export async function getStaticProps({ params }) {
 
     ["toolsNeeded", "materialsNeeded", "safetyTips", "commonMistakes", "projectTags"].forEach(
       (k) => {
-        if (Array.isArray(post[k])) post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
+        if (Array.isArray(post[k]))
+          post[k] = post[k].map((x) => sanitizePlainText(asString(x)));
       }
     );
 
@@ -867,7 +920,10 @@ export async function getStaticPaths() {
   try {
     const { client } = await import("../../lib/sanity.client");
     const slugs = await client.fetch(SLUGS_QUERY);
-    return { paths: (slugs || []).map((s) => ({ params: { slug: s } })), fallback: "blocking" };
+    return {
+      paths: (slugs || []).map((s) => ({ params: { slug: s } })),
+      fallback: "blocking",
+    };
   } catch {
     return { paths: [], fallback: "blocking" };
   }
