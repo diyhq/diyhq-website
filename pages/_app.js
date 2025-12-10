@@ -1,32 +1,39 @@
 // pages/_app.js
-import Head from 'next/head';
-import '../styles/globals.css';
-import Header from '../components/Header';
-import Footer from '../components/Footer';
+import Head from "next/head";
+import "../styles/globals.css";
+import Header from "../components/Header";
+import Footer from "../components/Footer";
 
 function MyApp({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9161898764253346" crossOrigin="anonymous"></script>
+        {/* Google AdSense */}
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9161898764253346"
+          crossOrigin="anonymous"
+        ></script>
 
+        {/* Basic meta */}
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#ffffff" />
         <meta name="author" content="DIY HQ" />
-        <meta name="description" content="DIY HQ is your go-to source for home repair, smart tech, tool reviews, side hustles, and all things hands-on DIY." />
-        <meta name="keywords" content="DIY, home improvement, tool reviews, handyman tips, home repair, side hustle, smart home, renovation, organization, automotive, garden" />
+        <meta
+          name="description"
+          content="DIY HQ is your go-to source for home repair, smart tech, tool reviews, side hustles, and all things hands-on DIY."
+        />
+        <meta
+          name="keywords"
+          content="DIY, home improvement, tool reviews, handyman tips, home repair, side hustle, smart home, renovation, organization, automotive, garden"
+        />
 
-        <meta property="og:type" content="website" />
-        <meta property="og:title" content="DIY HQ" />
-        <meta property="og:description" content="Explore tools, repairs, renovations, and hands-on guides for every real-world DIY project." />
-        <meta property="og:url" content="https://www.doityourselfhq.com" />
-        <meta property="og:image" content="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg" />
-
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="DIY HQ - Tools, Repairs & Real-World Projects" />
-        <meta name="twitter:description" content="Conquer home projects with pro tips, gear reviews, and real-world advice from DIY HQ." />
-        <meta name="twitter:image" content="/images/logo/DIY_HQ_Logo_WhiteBackground.jpg" />
+        {/* IMPORTANT:
+            We intentionally do NOT set global Open Graph or Twitter
+            image tags here, so that blog posts can control og:image
+            per-post from pages/post/[slug].js using their hero image.
+        */}
 
         <link rel="icon" href="/favicon.ico" />
         <title>DIY HQ</title>
@@ -43,4 +50,5 @@ function MyApp({ Component, pageProps }) {
     </>
   );
 }
+
 export default MyApp;
